@@ -1,7 +1,5 @@
 /* eslint-disable */
 
-import fetch from "cross-fetch";
-
 export interface Balance {
   chain: string;
   amount: string;
@@ -287,30 +285,17 @@ export class PhantasmaAPI {
   pingAsync(host: string): Promise<number> {
     return new Promise((resolve, reject) => {
       var started = new Date().getTime();
-      var http = new XMLHttpRequest();
+      let response = fetch(host + "/api/v1/GetNexus?extended=false", {
+        method: 'GET',
+        // headers: {'Content-Type': 'application/json; charset=utf-8'},
+        // body: JSON.stringify(obj)
+      });
 
-      http.open("GET", host + "/api/v1/GetNexus?extended=false", true);
-      http.timeout = 4500;
-      http.onreadystatechange = function () {
-        if (http.readyState == 4 && http.status == 200) {
-          var ended = new Date().getTime();
-          var milliseconds = ended - started;
-          resolve(milliseconds);
-        }
-
-        http.ontimeout = function () {
-          resolve(100000);
-        };
-        http.onerror = function () {
-          resolve(100000);
-        };
-      };
-      try {
-        http.send(null);
-      } catch (exception) {
-        // this is expected
-        reject();
-      }
+      response.then((rd) => {
+        var ended = new Date().getTime();
+        var milliseconds = ended - started;
+        resolve(milliseconds);  
+      }).catch(() => resolve(100000));
     });
   }
 
@@ -320,25 +305,27 @@ export class PhantasmaAPI {
     this.host = defHost;
     this.availableHosts = [];
 
-    fetch(peersUrlJson + "?_=" + new Date().getTime()).then(async (res) => {
-      const data = await res.json();
-      for (var i = 0; i < data.length; i++) {
-        console.log("Checking RPC: ", data[i]);
-        try {
-          const msecs = await this.pingAsync(data[i].url);
-          data[i].info = data[i].location + " • " + msecs + " ms";
-          data[i].msecs = msecs;
-          console.log(
-            data[i].location + " • " + msecs + " ms • " + data[i].url + "/rpc"
-          );
-          this.availableHosts.push(data[i]);
-        } catch (err) {
-          console.log("Error with RPC: " + data[i]);
+    if (peersUrlJson) {
+      fetch(peersUrlJson + "?_=" + new Date().getTime()).then(async (res) => {
+        const data = await res.json();
+        for (var i = 0; i < data.length; i++) {
+          console.log("Checking RPC: ", data[i]);
+          try {
+            const msecs = await this.pingAsync(data[i].url);
+            data[i].info = data[i].location + " • " + msecs + " ms";
+            data[i].msecs = msecs;
+            console.log(
+              data[i].location + " • " + msecs + " ms • " + data[i].url + "/rpc"
+            );
+            this.availableHosts.push(data[i]);
+          } catch (err) {
+            console.log("Error with RPC: " + data[i]);
+          }
         }
-      }
-      this.availableHosts.sort((a, b) => a.msecs - b.msecs);
-      this.updateRpc();
-    });
+        this.availableHosts.sort((a, b) => a.msecs - b.msecs);
+        this.updateRpc();
+      });
+    }
   }
 
   async JSONRPC(method: string, params: Array<any>): Promise<any> {
@@ -650,31 +637,6 @@ export class PhantasmaAPI {
     let params: Array<any> = [];
     return (await this.JSONRPC("getValidators", params)) as Validator;
   }
-
-  //Tries to settle a pending swap for a specific hash.
-  async settleSwap(
-    sourcePlatform: string,
-    destPlatform: string,
-    hashText: string
-  ): Promise<string> {
-    let params: Array<any> = [sourcePlatform, destPlatform, hashText];
-    return (await this.JSONRPC("settleSwap", params)) as string;
-  }
-
-  //Returns platform swaps for a specific address.
-  async getSwapsForAddressOld(account: string): Promise<Swap[]> {
-    let params: Array<any> = [account];
-    return (await this.JSONRPC("getSwapsForAddress", params)) as Swap[];
-  }
-
-  //Returns platform swaps for a specific address.
-  async getSwapsForAddress(account: string, platform: string): Promise<Swap[]> {
-    let params: Array<any> = [account, platform, false];
-    const res = (await this.JSONRPC("getSwapsForAddress", params));
-    if (res.error) return [];
-    return res as Swap[]
-  }
-
 
   //Returns info of a nft.
   async getNFT(symbol: string, nftId: string): Promise<NFT> {

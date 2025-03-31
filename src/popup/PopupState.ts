@@ -2,7 +2,6 @@ import WIF from "wif";
 import fetch from "cross-fetch";
 import * as CryptoJS from "crypto-js";
 import createHash from "create-hash";
-import * as Secp256k1 from "@enumatech/secp256k1-js";
 
 import {
   PhantasmaAPI,
@@ -16,19 +15,7 @@ import {
   signData,
   Swap,
   Token,
-} from "@/phan-js";
-
-import { getNeoAddressFromWif, getNeoBalances } from "@/neo";
-import {
-  getChecksumAddress,
-  getEthAddressFromWif,
-  getEthBalances,
-  getEthContract,
-} from "@/ethereum";
-import { getBscAddressFromWif, getBscBalances, getBscContract } from "@/bsc";
-import base58 from "bs58";
-import { byteArrayToHex } from "@/phan-js/utils";
-import { TransactionNG } from "@/phan-js/tx/TransactionNG";
+} from "phantasma-ts";
 
 export interface ISymbolAmount {
   symbol: string;
@@ -82,7 +69,7 @@ export interface NexusData<T> {
 export class PopupState {
   api = new PhantasmaAPI(
     "https://pharpc1.phantasma.info/rpc",
-    "https://peers.phantasma.io/mainnet-getpeers.json"
+    "https://peers.phantasma.info/mainnet-getpeers.json", "none"
   );
 
   private _currentAccountIndex = 0;
@@ -95,7 +82,7 @@ export class PopupState {
   private _currenciesRate: any;
   private _nexus: string = "MainNet";
   private _simnetRpc = "http://localhost:7077/rpc";
-  private _testnetRpc = "http://testnet.phantasma.io:7077/rpc";
+  private _testnetRpc = "https://testnet.phantasma.info/rpc";
   private _mainnetRpc = "Auto";
   private _tokens: NexusData<Token[]> = {
     mainnet: [],
@@ -115,7 +102,10 @@ export class PopupState {
 
   allSwaps: Swap[] = [];
 
-  payload = "4543542d312e352e35";
+  payload = "4543542d312e362e30";
+
+  mainetPeers = "https://peers.phantasma.info/mainnet-getpeers.json";
+  testnetPeers = "https://peers.phantasma.info/testnet-getpeers.json";
 
   gasPrice = 100000;
   gasLimit = 500000;
@@ -206,6 +196,7 @@ export class PopupState {
   }
 
   async setNexus(value: string): Promise<void> {
+    console.log("[PS] Setting nexus to", value);
     this._nexus = value;
     this.api.setNexus(value);
     if (this._nexus == "MainNet") this.api.setRpcByName(this._mainnetRpc);
@@ -216,6 +207,7 @@ export class PopupState {
       chrome.storage.local.set(
         {
           nexus: this._nexus,
+          rpc: this.api.host,
         },
         () => resolve()
       );
@@ -420,9 +412,11 @@ export class PopupState {
 
   async checkTxError(tx: string): Promise<string | null> {
     const txdata = await this.api.getTransaction(tx);
+    const txdataAny = txdata as any;
     console.log("checkTx", txdata);
     if ((txdata as any).error) return 'pending'
     if (!txdata) return null;
+    if (txdataAny.Code == -32603 && txdataAny.Message) return txdataAny.Message
     if (txdata.state == 'Fault') {
       if (txdata.events) {
         const errEv = txdata.events.find(e => e.kind == 'ExecutionFailure')        
@@ -534,6 +528,15 @@ export class PopupState {
         decimals: 8,
       });
 
+    // make sure SOUL and KCAL are first
+    data.balances = data.balances.sort((a, b) => {
+      if (a.symbol == "SOUL") return -1;
+      if (b.symbol == "SOUL") return 1;
+      if (a.symbol == "KCAL") return -1;
+      if (b.symbol == "KCAL") return 1;
+      return a.symbol.localeCompare(b.symbol);
+    });
+
     console.log("Account data", data);
 
     return data;
@@ -590,9 +593,6 @@ export class PopupState {
 
   async addAccountWithWif(wif: string, password: string): Promise<void> {
     let address = getAddressFromWif(wif);
-    let ethAddress = getEthAddressFromWif(wif);
-    let neoAddress = getNeoAddressFromWif(wif);
-    let bscAddress = getBscAddressFromWif(wif);
     const accountData = await this.getAccountData(address);
     const hasPass = password != null && password != "";
     const matchAccount = this.accounts.filter(
@@ -604,9 +604,6 @@ export class PopupState {
       const encKey = CryptoJS.AES.encrypt(wif, password).toString();
       this._accounts.push({
         address: accountData.address,
-        ethAddress,
-        neoAddress,
-        bscAddress,
         type: "encKey",
         encKey,
         data: accountData,
@@ -614,9 +611,6 @@ export class PopupState {
     } else if (!alreadyExisting) {
       this._accounts.push({
         address: accountData.address,
-        ethAddress,
-        neoAddress,
-        bscAddress,
         type: "wif",
         wif,
         data: accountData,
@@ -638,9 +632,6 @@ export class PopupState {
     let pk = Buffer.from(hex, "hex");
     const wif = WIF.encode(128, pk, true);
     let address = getAddressFromWif(wif);
-    let ethAddress = getEthAddressFromWif(wif);
-    let neoAddress = getNeoAddressFromWif(wif);
-    let bscAddress = getBscAddressFromWif(wif);
     const accountData = await this.getAccountData(address);
     const matchAccount = this.accounts.filter(
       (a) => a.address == accountData.address
@@ -652,9 +643,6 @@ export class PopupState {
       const encKey = CryptoJS.AES.encrypt(wif, password).toString();
       this._accounts.push({
         address: accountData.address,
-        ethAddress,
-        neoAddress,
-        bscAddress,
         type: "encKey",
         encKey,
         data: accountData,
@@ -662,9 +650,6 @@ export class PopupState {
     } else if (!alreadyExisting) {
       this._accounts.push({
         address: accountData.address,
-        ethAddress,
-        neoAddress,
-        bscAddress,
         type: "wif",
         wif,
         data: accountData,
@@ -718,19 +703,6 @@ export class PopupState {
       account.address
     );
 
-    // fix non-checksum ethereum addresses
-    if (
-      account.ethAddress &&
-      account.ethAddress.toLocaleLowerCase() == account.ethAddress
-    ) {
-      account.ethAddress = getChecksumAddress(account.ethAddress);
-    }
-
-    // copy ETH address to BSC
-    if (account.ethAddress && !account.bscAddress) {
-      account.bscAddress = account.ethAddress;
-    }
-
     const allNfts = this.getAllTokens().filter(
       (t) => t.flags && !t.flags.includes("Fungible")
     );
@@ -749,8 +721,6 @@ export class PopupState {
       }
     }
 
-    await this.refreshSwapInfo();
-
     console.log(
       "Refreshed account " +
       JSON.stringify(this._accounts[this._currentAccountIndex])
@@ -759,108 +729,6 @@ export class PopupState {
     return new Promise((resolve, reject) => {
       chrome.storage.local.set({ accounts: this._accounts }, () => resolve());
     });
-  }
-
-  async refreshSwapInfo() {
-    const neoAddress = this.currentAccount!.neoAddress;
-    const ethAddress = this.currentAccount!.ethAddress;
-    const bscAddress = this.currentAccount!.bscAddress;
-    const isMainnet = this.isMainnet;
-
-    this.allSwaps = [];
-    if (neoAddress) {
-      try {
-        this.neoBalances = await getNeoBalances(neoAddress, isMainnet);
-        console.log("neoBals", this.neoBalances);
-        let neoSwaps = await this.api.getSwapsForAddress(neoAddress, 'neo');
-        console.log("neoSwaps", neoSwaps);
-        if (neoSwaps) {
-          neoSwaps = neoSwaps.filter((s) => s.destinationHash === "pending");
-        }
-        console.log("neoSwaps", neoSwaps);
-        if (!(neoSwaps as any).error) this.allSwaps = neoSwaps;
-      } catch (err) {
-        console.log("error in neo balances and swaps", err);
-      }
-    }
-
-    if (ethAddress) {
-      try {
-        this.ethBalances = await getEthBalances(ethAddress, isMainnet);
-        console.log("ethBals", this.ethBalances);
-        let ethSwaps = await this.api.getSwapsForAddress(ethAddress, 'ethereum');
-        console.log("ethSwaps", ethSwaps);
-        if (ethSwaps) {
-          ethSwaps = ethSwaps.filter(
-            (s) =>
-              s.destinationHash === "pending" &&
-              (s.sourcePlatform === "ethereum" ||
-                s.destinationPlatform === "ethereum")
-          );
-        }
-        console.log("ethSwaps", ethSwaps);
-        if (!(ethSwaps as any).error)
-          this.allSwaps = this.allSwaps.concat(ethSwaps);
-      } catch (err) {
-        console.log("error in eth balances and swaps, trying old method...", err);
-      }
-    }
-
-    if (bscAddress) {
-      try {
-        this.bscBalances = await getBscBalances(bscAddress, isMainnet);
-        console.log("bscBals", this.bscBalances);
-        let bscSwaps = await this.api.getSwapsForAddress(bscAddress, 'bsc');
-        console.log("bscSwaps", bscSwaps);
-        if (bscSwaps) {
-          bscSwaps = bscSwaps.filter(
-            (s) =>
-              s.destinationHash === "pending" &&
-              (s.sourcePlatform === "bsc" || s.destinationPlatform === "bsc")
-          );
-        }
-        console.log("bscSwaps", bscSwaps);
-        if (!(bscSwaps as any).error)
-          this.allSwaps = this.allSwaps.concat(bscSwaps);
-      } catch (err) {
-        console.log("error in bsc balances and swaps, trying old method...", err);
-      }
-    }
-
-    try {
-      let phaSwaps = await this.api.getSwapsForAddress(this.currentAccount!.address, 'phantasma');
-      console.log("phaSwaps", phaSwaps);
-      phaSwaps = phaSwaps?.filter(
-        (s) =>
-          s.destinationHash === "pending" &&
-          this.allSwaps.findIndex(
-            (p) => p.sourceHash == s.sourceHash && p.symbol == s.symbol
-          ) < 0
-      );
-      console.log("allSwaps", this.allSwaps);
-    } catch (err) {
-      console.log("error in getting pending pha swaps, trying old method...", err);
-    }
-
-    // check external pending swaps, if there are
-    /* const curTime = new Date().getTime();
-    const toRemove: IPendingSwap[] = [];
-    this._pendingSwaps.forEach(async (ps) => {
-      let swaps = await this.api.getSwapsForAddress(ps.addressTo);
-      var swap = swaps.find((s) => s.sourceHash == ps.hash);
-      if (swap && swap.destinationHash === "pending") {
-        ps.swap = swap;
-      } else if (curTime - ps.date > 10000) {
-        // only remove if 10 seconds elapsed
-        toRemove.push(ps);
-      }
-    });
-
-    // remove the ones already processed
-    if (toRemove.length > 0) {
-      this._pendingSwaps.filter((p) => !toRemove.includes(p));
-      chrome.storage.local.set({ pendingSwaps: this._pendingSwaps }, () => {});
-    } */
   }
 
   async authorizeDapp(
@@ -897,59 +765,6 @@ export class PopupState {
     return this._authorizations.find((a) => a.token == token)!.dapp;
   }
 
-  async addPendingSwap(chainTo: string, addressTo: string, hash: string) {
-    await this.check(this.$i18n); // make sure we don't overwrite any other pending swap
-    this._pendingSwaps.push({
-      chainTo,
-      addressTo,
-      hash,
-      swap: null,
-      date: new Date().getTime(),
-    });
-    console.log("pending swaps", JSON.stringify(this._pendingSwaps, null, 2));
-    chrome.storage.local.set({ pendingSwaps: this._pendingSwaps }, () => { });
-  }
-
-  addSwapAddressWithPassword(password: string) {
-    const account = this.currentAccount;
-    if (!account) throw new Error(this.$i18n.t("error.noAccount").toString());
-
-    let wif = "";
-    if (password == "") {
-      if (account.wif) wif = account.wif;
-    } else {
-      if (!account.encKey)
-        throw new Error(this.$i18n.t("error.noEncrypted").toString());
-
-      const hex = CryptoJS.AES.decrypt(account.encKey, password).toString();
-      for (var i = 0; i < hex.length && hex.substr(i, 2) !== "00"; i += 2)
-        wif += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-    }
-
-    if (!this.isWifValidForAccount(wif))
-      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
-
-    this.addSwapAddress(wif);
-  }
-
-  addSwapAddress(wif: string) {
-    const phaAddress = getAddressFromWif(wif)
-    const ethAddress = getEthAddressFromWif(wif);
-    const neoAddress = getNeoAddressFromWif(wif);
-    const bscAddress = getBscAddressFromWif(wif);
-
-    const curAddress = this._accounts[this._currentAccountIndex].address
-
-    if (curAddress != phaAddress)
-      throw new Error(`Wrong WIF (${phaAddress}) for ${curAddress}`)
-
-    this._accounts[this._currentAccountIndex].ethAddress = ethAddress;
-    this._accounts[this._currentAccountIndex].neoAddress = neoAddress;
-    this._accounts[this._currentAccountIndex].bscAddress = bscAddress;
-
-    chrome.storage.local.set({ accounts: this._accounts });
-  }
-
   async signTxWithPassword(
     txdata: TxArgsData,
     address: string,
@@ -984,12 +799,11 @@ export class PopupState {
     if (!this.isWifValidForAccount(wif))
       throw new Error(this.$i18n.t("error.noAccountMatch").toString());
 
-    const address = account.address;
-    console.log('address', address, 'wif', wif)
-
-    const dt = new Date();
+    let dt = new Date();
     dt.setMinutes(dt.getMinutes() + 5);
+    dt.setHours(dt.getHours() + 1);
     console.log(dt);
+
     const tx = new Transaction(
       txdata.nexus && txdata.nexus != '' ?  txdata.nexus : this.nexus,
       txdata.chain,
@@ -998,11 +812,11 @@ export class PopupState {
       txdata.payload,
     );
 
-    const privateKey = getPrivateKeyFromWif(wif);
+    tx.sign(wif);
 
-    tx.sign(privateKey);
-
-    const hash = await this.api.sendRawTransaction(tx.toString(true));
+    const txHex = tx.toString(true)
+    console.log("Signed ", txHex);
+    const hash = await this.api.sendRawTransaction(txHex.toUpperCase());
     console.log("Returned from sendRawTransaction with res: ", hash);
 
     return hash;
@@ -1046,113 +860,6 @@ export class PopupState {
     return signData(data, privateKey);
   }
 
-  async signTxEth(
-    txdata: TxArgsData,
-    wif: string,
-    alsoSignWithPha: boolean = false
-  ): Promise<string> {
-    const account = this.currentAccount;
-    if (!account) throw new Error("Account not valid");
-
-    // check that account matches the WIF
-    if (account.address !== getAddressFromWif(wif))
-      throw new Error("The Phantasma address does not match with swap address. You should reimport it to do swaps.")
-
-    const address = account.address;
-
-    const pkHex = getPrivateKeyFromWif(wif);
-
-    const dt = new Date();
-    dt.setMinutes(dt.getMinutes() + 5);
-    console.log(dt);
-    const tx = new Transaction(
-      txdata.nexus,
-      txdata.chain,
-      txdata.script,
-      dt,
-      txdata.payload
-    );
-
-    // Do custom signature
-    const msgHex = tx.toString(false);
-    const sha256Msg = createHash("sha256")
-      .update(msgHex, "hex")
-      .digest();
-
-    console.log("msgToSign", msgHex);
-
-    const privateKey = Secp256k1.uint256(pkHex, 16);
-    const digest = Secp256k1.uint256(byteArrayToHex(sha256Msg), 16);
-
-    const publicKey = Secp256k1.generatePublicKeyFromPrivateKeyData(privateKey);
-    console.log("public", publicKey);
-
-    const sig = Secp256k1.ecsign(privateKey, digest);
-    console.log(sig);
-
-    const signature = sig.r + sig.s;
-    console.log("signature", signature);
-
-    tx.signatures.unshift({ signature, kind: 2 });
-
-    if (alsoSignWithPha) {
-      tx.sign(getPrivateKeyFromWif(wif));
-    }
-
-    const rawTx = tx.toString(true);
-
-    console.log("%c" + rawTx, "color:red");
-
-    const hash = await this.api.sendRawTransaction(rawTx);
-    console.log("Returned from sendRawTransaction with res: ", hash);
-
-    return hash;
-  }
-
-  async signTxEthWithPassword(
-    txdata: TxArgsData,
-    password: string,
-    alsoSignWithPha: boolean = false
-  ) {
-    const hash = await this.signTxEth(
-      txdata,
-      this.getWifFromPassword(password),
-      alsoSignWithPha
-    );
-    return hash;
-  }
-
-  getBscContract(symbol: string) {
-    return getBscContract(symbol, this.isMainnet);
-  }
-
-  getEthContract(symbol: string) {
-    return getEthContract(symbol, this.isMainnet);
-  }
-
-  getNeoContract(symbol: string) {
-    const hash = this.getTokenHash(symbol, "neo");
-    if (hash) return hash;
-    return "ed07cffad18f1308db51920d99a2af60ac66a7b3"; // harcoded SOUL NEP5 contract
-  }
-
-  getTranscodeAddress(wif: string) {
-    const pkHex = getPrivateKeyFromWif(wif);
-    const privateKey = Secp256k1.uint256(pkHex, 16);
-    const publicKey = Secp256k1.generatePublicKeyFromPrivateKeyData(privateKey);
-    console.log("public", publicKey);
-    var lastBit = parseInt(publicKey.y[63], 16) & 1;
-    var addressHex = Buffer.from(
-      (lastBit == 1 ? "0103" : "0102") + publicKey.x,
-      "hex"
-    );
-    return "P" + base58.encode(addressHex);
-  }
-
-  getTranscodeAddressWithPassword(password: string) {
-    return this.getTranscodeAddress(this.getWifFromPassword(password));
-  }
-
   getWifFromPassword(
     password: string,
     acc: WalletAccount | undefined = undefined
@@ -1182,30 +889,8 @@ export class PopupState {
     return (this._tokens as any)[this.nexus] as Token[];
   }
 
-  getAllSwapableTokens(platform: string) {
-    return this.getAllTokens().filter(
-      (t) =>
-        t.external && t.external.findIndex((e) => e.platform == platform) >= 0
-    );
-  }
-
   getToken(symbol: string) {
     return this.getAllTokens().find((t) => t.symbol == symbol);
-  }
-
-  getTokenHash(symbol: string, chain: string) {
-    const ch = chain == "eth" ? "ethereum" : chain;
-    const token = this.getToken(symbol);
-    if (token && token.external) {
-      let ext = token.external.find((e) => e.platform == ch);
-      if (ext) return ext.hash;
-    }
-    return undefined;
-  }
-
-  isSwappable(symbol: string, swapToChain: string) {
-    const hash = this.getTokenHash(symbol, swapToChain);
-    return hash != null;
   }
 
   decimals(symbol: string): number {
@@ -1301,6 +986,7 @@ export class PopupState {
   async queryNfts(ids: string[], token: string) {
     const allNftsToQuery = [];
     console.log('ids', ids, 'token', token)
+    return;  // do not query nfts for now
 
     for (let k = 0; k < ids.length; ++k) {
       const id = ids[k];
@@ -1357,15 +1043,15 @@ export class PopupState {
         console.log("Got nft", nft);
 
         const imgUrlUnformated = nft.properties.find(
-          (kv) => kv.key == "ImageURL"
-        )?.value;
+          (kv) => kv.Key == "ImageURL"
+        )?.Value;
 
         let nftDef = {
           id: nftId,
           mint: nft.mint,
           img: imgUrlUnformated,
-          type: nft.properties.find((kv) => kv.key == "Type")?.value,
-          name: nft.properties.find((kv) => kv.key == "Name")?.value,
+          type: nft.properties.find((kv) => kv.Key == "Type")?.Value,
+          name: nft.properties.find((kv) => kv.Key == "Name")?.Value,
           infusion: nft.infusion,
         };
         console.log('')

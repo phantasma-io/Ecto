@@ -2,7 +2,6 @@ let tabid = -1;
 
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
   if (msg.uid == "plsres") {
-    console.log("[content script] received plsres " + JSON.stringify(msg));
     window.postMessage(msg, "*");
   }
 
@@ -13,17 +12,17 @@ chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
 
     const elt = document.createElement("script");
     elt.setAttribute("id", "phantasmaLinkDetectedScript");
-    elt.innerHTML = "window._PhantasmaLinkDetected = true;";
+    // elt.innerHTML = "window._PhantasmaLinkDetected = true;";
     (document.head || document.documentElement).appendChild(elt);
 
     const s = document.createElement("script");
-    s.src = chrome.extension.getURL("js/inpage.js");
+    s.src = chrome.runtime.getURL("js/inpage.js");
     (document.head || document.documentElement).appendChild(s);
     s.onload = function() {
       s.remove();
     };
   }
-  return Promise.resolve("Dummy response to keep the console quiet");
+  sendResponse("Dummy response to keep the console quiet");
 });
 
 window.addEventListener("message", (msg) => {

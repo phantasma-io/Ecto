@@ -156,7 +156,7 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import { Account, getPrivateKeyFromWif } from "@/phan-js";
+import { Account, getPrivateKeyFromWif } from "phantasma-ts";
 import ErrorDialog from "@/components/ErrorDialog.vue";
 
 import { state, WalletAccount } from "@/popup/PopupState";
@@ -277,7 +277,7 @@ export default class extends Vue {
       this.hexPk = getPrivateKeyFromWif(this.wif);
       this.showPrivateKeyDialog = true;
     } catch (err) {
-      this.errorMessage = err;
+      this.errorMessage = err as string;
       this.errorDialog = true;
     }
     this.password = "";

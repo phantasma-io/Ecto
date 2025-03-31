@@ -84,8 +84,6 @@
 import Vue from "vue";
 import Component from "vue-class-component";
 import { Watch } from "vue-property-decorator";
-import { Account, Transaction, getPrivateKeyFromWif, Balance } from "@/phan-js";
-
 import { state, WalletAccount } from "@/popup/PopupState";
 
 @Component({})
@@ -228,9 +226,8 @@ export default class extends Vue {
       tabid,
       sid,
       data: { wallet: "Ecto", dapp, token, id, success: true },
-    });
+    }, () => window.close() );
 
-    window.close();
   }
 }
 </script>
