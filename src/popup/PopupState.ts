@@ -801,7 +801,7 @@ export class PopupState {
 
     let dt = new Date();
     dt.setMinutes(dt.getMinutes() + 5);
-    dt.setHours(dt.getHours() + 1);
+    dt.setHours(dt.getHours() + 2);
     console.log(dt);
 
     const tx = new Transaction(
