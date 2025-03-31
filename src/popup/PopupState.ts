@@ -800,8 +800,7 @@ export class PopupState {
       throw new Error(this.$i18n.t("error.noAccountMatch").toString());
 
     let dt = new Date();
-    dt.setMinutes(dt.getMinutes() + 5);
-    dt.setHours(dt.getHours() + 2);
+    dt.setMinutes(dt.getMinutes() + 5 - dt.getTimezoneOffset()); // fix for bug in phantasma-ts
     console.log(dt);
 
     const tx = new Transaction(
