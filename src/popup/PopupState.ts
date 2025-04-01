@@ -631,8 +631,35 @@ export class PopupState {
   async addAccountWithHex(hex: string, password: string): Promise<void> {
     let pk = Buffer.from(hex, "hex");
     const wif = WIF.encode(128, pk, true);
-    let address = getAddressFromWif(wif);
-    const accountData = await this.getAccountData(address);
+    let address = getAddressFromWif(wif);    
+    // empty account data
+    let accountData: Account = {
+      address,
+      name: "anonymous",
+      stakes: {
+          amount: "0",
+          time: 0,
+          unclaimed: "0"
+      },
+      stake: "0",
+      unclaimed: "0",
+      relay: "",
+      validator: "Invalid",
+      storage: {
+          available: 0,
+          used: 0,
+          avatar: "",
+          archives: []
+      },
+      balances: [],
+      txs: []
+    };
+    try {
+      accountData = await this.getAccountData(address);
+    } catch (err) {
+      // still add the account even if balances are not available now
+      console.error("Error getting account data", err);
+    }
     const matchAccount = this.accounts.filter(
       (a) => a.address == accountData.address
     );
