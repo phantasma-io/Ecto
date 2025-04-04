@@ -1688,7 +1688,7 @@ export default class extends Vue {
       address,
       this.sendDestination,
       this.sendSymbol,
-      Math.floor(this.sendAmount * 10 ** this.sendDecimals),
+      Math.floor(this.sendAmount * 10 ** this.sendDecimals).toString(),
     ]);
     sb.SpendGas(address);
     const script = sb.EndScript();
