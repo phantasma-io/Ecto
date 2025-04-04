@@ -169,7 +169,7 @@
                         data.item.location + " · " + data.item.msecs + " ms"
                       }}</strong>
                       <br />
-                      {{ data.item.url + "/rpc" }}
+                      {{ data.item.url }}
                     </div>
                   </template></v-select
                 ></v-list-item-action-text

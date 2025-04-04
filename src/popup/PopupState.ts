@@ -67,10 +67,7 @@ export interface NexusData<T> {
 }
 
 export class PopupState {
-  api = new PhantasmaAPI(
-    "https://pharpc1.phantasma.info/rpc",
-    "https://peers.phantasma.info/mainnet-getpeers.json", "none"
-  );
+  api = new PhantasmaAPI("https://pharpc1.phantasma.info/rpc", undefined as any, "none");
 
   private _currentAccountIndex = 0;
   private _accounts: WalletAccount[] = [];
@@ -84,6 +81,7 @@ export class PopupState {
   private _simnetRpc = "http://localhost:7077/rpc";
   private _testnetRpc = "https://testnet.phantasma.info/rpc";
   private _mainnetRpc = "Auto";
+  private _defRpcHost = "https://pharpc1.phantasma.info/rpc";
   private _tokens: NexusData<Token[]> = {
     mainnet: [],
     testnet: [],
@@ -114,7 +112,60 @@ export class PopupState {
     t: (s: string) => s,
   };
 
-  constructor() { }
+  availableHosts: any[] = [];
+
+  pingAsync(host: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      var started = new Date().getTime();
+      var http = new XMLHttpRequest();
+
+      http.open('GET', host + '/api/v1/GetNexus', true);
+      http.timeout = 4500;
+      http.onreadystatechange = function () {
+        if (http.readyState == 4 && http.status == 200) {
+          var ended = new Date().getTime();
+          var milliseconds = ended - started;
+          resolve(milliseconds);
+        }
+
+        http.ontimeout = function () {
+          resolve(100000);
+        };
+        http.onerror = function () {
+          resolve(100000);
+        };
+      };
+      try {
+        http.send(null);
+      } catch (exception) {
+        // this is expected
+        reject();
+      }
+    });
+  }
+
+  constructor() {
+    const peersUrlJson = this.mainetPeers
+    if (peersUrlJson != undefined) {
+      fetch(peersUrlJson + '?_=' + new Date().getTime()).then(async (res) => {
+        const data = await res.json();
+        for (var i = 0; i < data.length; i++) {
+          console.log('Checking RPC: ', data[i]);
+          try {
+            const msecs = await this.pingAsync(data[i].url);
+            data[i].info = data[i].location + ' • ' + msecs + ' ms';
+            data[i].msecs = msecs;
+            console.log(data[i].location + ' • ' + msecs + ' ms • ' + data[i].url + '/rpc');
+            this.availableHosts.push(data[i]);
+          } catch (err) {
+            console.log('Error with RPC: ' + data[i]);
+          }
+        }
+        this.availableHosts.sort((a, b) => a.msecs - b.msecs);
+        this.updateRpc();
+      });
+    }
+  }
 
   get accounts() {
     return this._accounts;
@@ -263,7 +314,7 @@ export class PopupState {
   }
 
   get mainnetRpcList() {
-    return this.api.availableHosts;
+    return this.availableHosts;
   }
 
   get pendingSwaps() {
@@ -335,6 +386,25 @@ export class PopupState {
     }
     return -1;
   }
+  
+  updateRpc(): void {
+    let rpc = this._mainnetRpc == 'Auto' && this.availableHosts.length > 0 ? this.availableHosts[0].url : this._defRpcHost;
+    if (this._nexus == "SimNet") rpc = this._simnetRpc;
+    if (this._nexus == "TestNet") rpc = this._testnetRpc;
+
+    if (!rpc.endsWith('/rpc')) 
+      rpc += '/rpc';
+
+    this.api.setRpcHost(rpc);
+
+    chrome.storage.local.set(
+      {
+        rpc,
+        nexus: this._nexus,
+      },
+      () => {}
+    );
+  }
 
   async check($i18n: any): Promise<void> {
     if ($i18n) this.$i18n = $i18n; // save translate method from Vue i18n
@@ -375,10 +445,8 @@ export class PopupState {
         if (items.mainnetRpc) this._mainnetRpc = items.mainnetRpc;
         if (items.nexus) this._nexus = items.nexus;
 
-        this.api.setRpcByName(this._mainnetRpc);
         this.api.setNexus(this._nexus);
-        if (this._nexus == "SimNet") this.api.setRpcHost(this._simnetRpc);
-        if (this._nexus == "TestNet") this.api.setRpcHost(this._testnetRpc);
+        this.updateRpc();
 
         try {
           // query tokens info if needed for current nexus
