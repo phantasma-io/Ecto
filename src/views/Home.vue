@@ -46,7 +46,7 @@
           ><span v-else v-html="$t('home.multiChain')"></span
         ></v-tab> -->
 
-        <v-tab-item key="1">
+        <v-tab-item key="1" :style="styleTab">
           <v-container
             class="overflow-y-auto overflow-x-hidden pa-0"
             style="max-height:460px; margin-bottom: 22px"
@@ -217,7 +217,7 @@
           </v-container>
         </v-tab-item>
 
-        <v-tab-item key="2">
+        <v-tab-item key="2" :style="styleTab">
           <div style="overflow: auto; height: 460px; margin-bottom: 1px">
             <div class="mt-5 ml-7 pl-7" v-if="!txs || (txs.length == 0 && loadingTxs.length == 0)"> Nothing here. </div>
             <v-simple-table v-if="txs.length > 0">
@@ -961,6 +961,11 @@ export default class extends Vue {
 
   goto(route: string) {
     this.$router.push(route);
+  }
+
+  get styleTab() {
+    if (this.state.isAccountOk) return {};
+    return { "opacity": 0.25 };
   }
 
   get nftArray() {

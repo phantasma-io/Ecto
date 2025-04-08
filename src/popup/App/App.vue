@@ -240,7 +240,6 @@ export default class extends Vue {
 
   netIndex = 0;
 
-  
   showAdvancedSettings = false;
 
   gasLimitValue: any = { text: '90000 (Default)', value: 90000}
@@ -403,7 +402,10 @@ export default class extends Vue {
   async selectNet(item: string) {
     console.log("selectNet", item);
     state.setNexus(item);
-    if (state.nexus != item) await this.refreshAccount();
+    if (state.nexus != item) {
+      state.isAccountOk = false;
+      await this.refreshAccount();
+    }
   }
 
   async acceptSimnetRpc() {

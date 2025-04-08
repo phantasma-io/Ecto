@@ -94,11 +94,7 @@ export class PopupState {
   accountNfts: any[] = [];
   nfts: any = {};
 
-  ethBalances: ISymbolAmount[] = [];
-  neoBalances: ISymbolAmount[] = [];
-  bscBalances: ISymbolAmount[] = [];
-
-  allSwaps: Swap[] = [];
+  isAccountOk = false;
 
   payload = "4543542d312e362e30";
 
@@ -250,9 +246,7 @@ export class PopupState {
     console.log("[PS] Setting nexus to", value);
     this._nexus = value;
     this.api.setNexus(value);
-    if (this._nexus == "MainNet") this.api.setRpcByName(this._mainnetRpc);
-    if (this._nexus == "SimNet") this.api.setRpcHost(this._simnetRpc);
-    if (this._nexus == "TestNet") this.api.setRpcHost(this._testnetRpc);
+    this.updateRpc();
 
     return new Promise((resolve, reject) => {
       chrome.storage.local.set(
@@ -267,7 +261,7 @@ export class PopupState {
 
   async setSimnetRpc(value: string): Promise<void> {
     this._simnetRpc = value;
-    if (this._nexus == "SimNet") this.api.setRpcHost(this._simnetRpc);
+    this.updateRpc();
     return new Promise((resolve, reject) => {
       chrome.storage.local.set(
         {
@@ -280,7 +274,7 @@ export class PopupState {
 
   async setTestnetRpc(value: string): Promise<void> {
     this._testnetRpc = value;
-    if (this._nexus == "TestNet") this.api.setRpcHost(this._testnetRpc);
+    this.updateRpc();
     return new Promise((resolve, reject) => {
       chrome.storage.local.set(
         {
@@ -294,7 +288,7 @@ export class PopupState {
   async setMainnetRpc(value: string): Promise<void> {
     console.log("Saving to storage mainnet rpc", this._mainnetRpc);
     this._mainnetRpc = value;
-    this.api.setRpcByName(this._mainnetRpc);
+    this.updateRpc();
     return new Promise((resolve, reject) => {
       chrome.storage.local.set(
         {
@@ -798,6 +792,8 @@ export class PopupState {
       account.address
     );
 
+    this.isAccountOk = true;
+
     const allNfts = this.getAllTokens().filter(
       (t) => t.flags && !t.flags.includes("Fungible")
     );
@@ -883,7 +879,6 @@ export class PopupState {
     if (!this.isWifValidForAccount(wif))
       throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
 
-    console.log('wif', wif, 'account', account.address, 'txdata', txdata)
     return await this.signTx(txdata, wif);
   }
 
