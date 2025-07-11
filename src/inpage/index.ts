@@ -1,3 +1,5 @@
+(window as any)._PhantasmaLinkDetected = true;
+
 interface ICloseEvent {
   code: number;
   reason: string;

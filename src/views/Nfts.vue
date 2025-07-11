@@ -163,7 +163,7 @@
                                   '/' +
                                   item.id +
                                   '/'
-                              : 'https://testnet.ghostmarket.io/asset/pha/' +
+                              : 'https://testnet.ghostmarket.io/asset/phat/' +
                                   sendSymbol.toLowerCase() +
                                   '/' +
                                   item.id +
@@ -410,18 +410,8 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import {
-  PhantasmaAPI,
-  Account,
-  Transaction,
-  getPrivateKeyFromWif,
-  Balance,
-  TransactionData,
-  ScriptBuilder,
-} from "@/phan-js";
-
-import { state, TxArgsData, PopupState } from "@/popup/PopupState";
-import { Script } from "vm";
+import { ScriptBuilder } from "phantasma-ts";
+import { state, TxArgsData } from "@/popup/PopupState";
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
 import NFTMedia from "@/components/NFTMedia.vue";
 
@@ -770,10 +760,10 @@ export default class extends Vue {
 
     let sb = new ScriptBuilder();
 
-    sb.beginScript();
-    sb.allowGas(address, sb.nullAddress, gasPrice, minGasLimit);
+    sb.BeginScript();
+    sb.AllowGas(address, sb.NullAddress, gasPrice, minGasLimit);
     this.nftsToSend.forEach((nft) => {
-      sb.callInterop("Runtime.TransferToken", [
+      sb.CallInterop("Runtime.TransferToken", [
         address,
         this.sendDestination,
         this.sendSymbol,
@@ -789,8 +779,8 @@ export default class extends Vue {
         this.sendDestination
       );
     });
-    sb.spendGas(address);
-    const script = sb.endScript();
+    sb.SpendGas(address);
+    const script = sb.EndScript();
 
     const txdata: TxArgsData = {
       nexus: state.nexus,
@@ -811,7 +801,7 @@ export default class extends Vue {
       this.$root.$emit("checkTx", tx);
     } catch (err) {
       this.errorDialog = true;
-      this.errorMessage = err;
+      this.errorMessage = err as string;
     }
 
     // close dialog when it's done
@@ -835,15 +825,15 @@ export default class extends Vue {
 
     let sb = new ScriptBuilder();
 
-    sb.beginScript();
-    sb.allowGas(address, sb.nullAddress, gasPrice, minGasLimit);
+    sb.BeginScript();
+    sb.AllowGas(address, sb.NullAddress, gasPrice, minGasLimit);
     this.nftsToBurn.forEach((nft) => {
-      sb.callInterop("Runtime.BurnToken", [address, this.sendSymbol, nft.id]);
+      sb.CallInterop("Runtime.BurnToken", [address, this.sendSymbol, nft.id]);
 
       console.log("nft to burn", nft.id, "of", this.sendSymbol);
     });
-    sb.spendGas(address);
-    const script = sb.endScript();
+    sb.SpendGas(address);
+    const script = sb.EndScript();
 
     const txdata: TxArgsData = {
       nexus: state.nexus,
@@ -864,7 +854,7 @@ export default class extends Vue {
       this.$root.$emit("checkTx", tx);
     } catch (err) {
       this.errorDialog = true;
-      this.errorMessage = err;
+      this.errorMessage = err as string;
     }
 
     // close dialog when it's done

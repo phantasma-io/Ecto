@@ -34,7 +34,7 @@
         ></v-skeleton-loader>
         <img v-else :src="imgSrc" />
         <span v-if="!state.balanceShown">************************************</span>
-        <span v-else>{{ account.address }}</span>
+        <span v-else-if="account">{{ account.address }}</span>
         <br />
         <a href="" @click.prevent="copyAddressToClipboard()">{{
           $t("qr.copy")
@@ -47,8 +47,6 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import { Account } from "@/phan-js";
-
 import { state } from "@/popup/PopupState";
 import { QRCode, ErrorCorrectLevel } from "qrcode-generator-ts/js";
 

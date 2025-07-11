@@ -1,29 +1,7 @@
 /// <reference types="chrome"/>
-import Vue from "vue";
-import { PhantasmaAPI } from "@/phan-js";
-import { state, WalletAccount } from "@/popup/PopupState";
-import VueI18n from "vue-i18n";
-import { messages, defaultLocale } from "@/i18n";
-import { getEthBalances } from "@/ethereum";
-import { getNeoBalances } from "@/neo";
-import { getBscBalances } from "@/bsc";
+import { PhantasmaAPI } from "@/phan-js"; // we need this version as XmlHttpRequest is not available in service worker
 
-Vue.use(VueI18n);
-
-const powValues = {
-  None : 0,
-  Minimal : 5,
-  Moderate : 15,
-  Hard : 19,
-  Heavy : 24,
-  Extreme : 30
-}
-
-const i18n = new VueI18n({
-  messages,
-  locale: defaultLocale,
-  fallbackLocale: defaultLocale,
-});
+type WalletAccount = any;
 
 interface IAuthorization {
   dapp: string;
@@ -45,33 +23,37 @@ interface IBalance {
   decimals: number;
 }
 
-interface IAuthorizeResponse extends IWalletLinkResponse {
-  wallet: string;
-  dapp: string;
-  token: string;
-}
-
 interface IGetAccountResponse extends IWalletLinkResponse {
   address: string;
   name: string;
   avatar: string;
   balances: IBalance[];
   platform: string | undefined;
-  external: string | undefined;
+  external?: string | undefined;
 }
 
-interface ISignTxResponse extends IWalletLinkResponse {
-  hash: string;
+function getStorageItems(keys: string[]): Promise<{ [key: string]: any }> {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(keys, (items) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+      } else {
+        resolve(items);
+      }
+    });
+  });
 }
 
-let authorizations: IAuthorization[] = [];
-let accounts: WalletAccount[] = [];
-let currentAccountIndex = 0;
+async function getAuthorizations(): Promise<IAuthorization[]> {
+  const items = await getStorageItems(["authorizations"]);
+  return items.authorizations ? items.authorizations : [];
+}
 
-function currentAccount() {
-  return currentAccountIndex < accounts.length
-    ? accounts[currentAccountIndex]
-    : null;
+async function currentAccount(): Promise<WalletAccount | null> {
+  const items = await getStorageItems(["accounts", "currentAccountIndex"])
+  const accounts = items.accounts ? items.accounts : [];
+  const currentAccountIndex = items.currentAccountIndex ? items.currentAccountIndex : 0;
+  return currentAccountIndex < accounts.length ? accounts[currentAccountIndex] : null;
 }
 
 chrome.tabs.onUpdated.addListener(function (activeInfo) {
@@ -79,15 +61,14 @@ chrome.tabs.onUpdated.addListener(function (activeInfo) {
     const tab = tabs[0];
     const tabURL = tab.url;
 
-    if (!tabURL) return;
+    if (!tabURL || tab.status=='loading') return;
+    if (tabURL.startsWith("chrome")) return;
 
     if (tab.id)
       chrome.tabs.sendMessage(
         tab.id,
         { uid: "init", tabid: tab.id },
-        function () {
-          console.log(tab.id);
-        }
+        () => {}
       );
   });
 });
@@ -100,13 +81,14 @@ function genHexString(len: number) {
   return output;
 }
 
-function getAuthorizationToken(
+async function getAuthorizationToken(
   dapp: string,
   hostname: string,
   version: string
-): string | undefined {
+): Promise<string | undefined> {
   // remove first all authorizations that are expired
   const now = new Date();
+  const authorizations = await getAuthorizations();
   const validAuths = authorizations.filter((a) => new Date(a.expireDate) > now);
 
   if (validAuths.length != authorizations.length) {
@@ -123,28 +105,30 @@ function getAuthorizationToken(
   return auth.token;
 }
 
-function isValidRequest(args: string[]): boolean {
+async function isValidRequest(args: string[]): Promise<boolean> {
   if (args.length >= 3) {
     // const dapp = args[args.length - 2];
     const token = args[args.length - 1];
-
+    const authorizations = await getAuthorizations();
     const auth = authorizations.find((a) => a.token == token);
     return auth != undefined;
   }
   return false;
 }
 
-function getAddressFromToken(token: string): string | undefined {
+async function getAddressFromToken(token: string): Promise<string | undefined> {
+  const authorizations = await getAuthorizations();
   const auth = authorizations.find((a) => a.token == token);
   return auth?.address;
 }
 
-function getRequestAddress(
+async function getRequestAddress(
   args: string[]
-): { address: string; version: string } | undefined {
+): Promise<{ address: string; version: string } | undefined> {
   if (args.length >= 3) {
     const dapp = args[args.length - 2];
     const token = args[args.length - 1];
+    const authorizations = await getAuthorizations();
     const auth = authorizations.find((a) => a.token == token);
     return auth
       ? { address: auth.address, version: auth.version ? auth.version : "1" }
@@ -152,32 +136,9 @@ function getRequestAddress(
   }
 }
 
-chrome.storage.local.get((items) => {
-  authorizations = items.authorizations ? items.authorizations : [];
-  currentAccountIndex = items.currentAccountIndex
-    ? items.currentAccountIndex
-    : 0;
-  accounts = items.accounts
-    ? items.accounts.filter((a: WalletAccount) => a.type !== "wif")
-    : [];
-});
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area == "local") {
-    if (changes.authorizations) {
-      authorizations = changes.authorizations.newValue;
-    }
-    if (changes.accounts) {
-      accounts = changes.accounts.newValue;
-    }
-    if (changes.currentAccountIndex) {
-      currentAccountIndex = changes.currentAccountIndex.newValue;
-    }
-  }
-});
-
 chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) {
-  i18n.locale = state.locale;
+
+  console.log('[sw] Received msg', msg, 'from', sender)
 
   if (msg.uid == "plsres") {
     console.log(JSON.stringify(msg));
@@ -189,16 +150,17 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
 
     const id = parseInt(args[0]);
     if (args.length != 2) {
-      throw Error(i18n.t("error.malformed").toString());
+      throw Error("Invalid message format");
     }
 
     let cmd = args[1];
     args = cmd.split("/");
 
     const requestType = args[0];
-    console.log(
-      "[background] Received " + requestType + " with tabid " + msg.tabid
-    );
+    console.log("[sw] Received " + requestType + " with tabid " + msg.tabid);
+
+    const {nexus, rpc} = await getStorageItems(["nexus", "rpc"])
+    const api = new PhantasmaAPI(rpc, undefined as any)
 
     switch (requestType) {
       case "authorize":
@@ -210,20 +172,23 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
           const version = args.length > 2 ? args[2] : "1";
           console.log('version', version)
 
-          chrome.tabs.get(msg.tabid, (tab) => {
+          chrome.tabs.get(msg.tabid, async (tab) => {
             const url = tab.url || "http://unknown";
             const favicon = tab.favIconUrl || "unknown";
 
-            let authToken = getAuthorizationToken(
+            let authToken = await getAuthorizationToken(
               dapp,
               new URL(url).hostname,
               version
             );
 
+            const addressFromToken = authToken ? await getAddressFromToken(authToken) : undefined;
+            const curAccount = await currentAccount();
+
             // if authorization doesn't match current address, request new one
             if (
               authToken &&
-              getAddressFromToken(authToken) !== currentAccount()?.address
+              getAddressFromToken(authToken) !== curAccount?.address
             ) {
               authToken = undefined;
             }
@@ -240,7 +205,7 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
                   dapp,
                   token: authToken,
                   // new in v2
-                  nexus: state.nexus,
+                  nexus: nexus,
                   version: "2",
                   id,
                   success: true,
@@ -282,8 +247,9 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
         break;
 
       case "getAccount":
-        if (isValidRequest(args)) {
-          const req = getRequestAddress(args);
+        console.log('[sw] getAccount', args)
+        if (await isValidRequest(args)) {
+          const req = await getRequestAddress(args);
           if (req == null) return;
           const address = req.address;
           const version = req.version;
@@ -294,10 +260,8 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
             /// check that this is ok
           }
 
-          await state.check(undefined);
-          console.log("nexus", state.nexus);
           console.log("getting account " + address);
-          let account = await state.api.getAccount(address);
+          let account = await api.getAccount(address);
           if (!account.balances) {
             account.balances = [];
           }
@@ -310,6 +274,15 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
               decimals: 8,
             });
 
+          // make sure SOUL and KCAL are first
+          account.balances = account.balances.sort((a, b) => {
+            if (a.symbol == "SOUL") return -1;
+            if (b.symbol == "SOUL") return 1;
+            if (a.symbol == "KCAL") return -1;
+            if (b.symbol == "KCAL") return 1;
+            return 0;
+          });
+
           let balances:any = account.balances.map((x) => {
             return {
               value: x.amount,
@@ -319,68 +292,7 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
             };
           });
 
-          let external = ""; // external address (neo or eth or bsc) if platform is not phantasma
-
-          const curAccount = currentAccount();
-          if (platform == "bsc") {
-            let bscAddress = curAccount?.bscAddress;
-            if (bscAddress) {
-              external = bscAddress;
-              const bscBals = await getBscBalances(
-                bscAddress,
-                state.nexus == "mainnet"
-              );
-              balances = bscBals.map((b: any) => {
-                return {
-                  symbol: b.symbol,
-                  value: b.amount.toString(),
-                  decimals: state.decimals(b.symbol),
-                };
-              });
-            } else {
-              platform = "phantasma";
-            }
-          }
-
-          if (platform == "ethereum") {
-            let ethAddress = curAccount?.ethAddress;
-            if (ethAddress) {
-              external = ethAddress;
-              const ethBals = await getEthBalances(
-                ethAddress,
-                state.nexus == "mainnet"
-              );
-              balances = ethBals.map((b: any) => {
-                return {
-                  symbol: b.symbol,
-                  value: b.amount.toString(),
-                  decimals: state.decimals(b.symbol),
-                };
-              });
-            } else {
-              platform = "phantasma";
-            }
-          }
-
-          if (platform == "neo") {
-            let neoAddress = curAccount?.neoAddress;
-            if (neoAddress) {
-              external = neoAddress;
-              const neoBals = await getNeoBalances(
-                neoAddress,
-                state.nexus == "mainnet"
-              );
-              balances = neoBals.map((b: any) => {
-                return {
-                  symbol: b.symbol,
-                  value: b.amount,
-                  decimals: state.decimals(b.symbol),
-                };
-              });
-            } else {
-              platform = "phantasma";
-            }
-          }
+          platform = "phantasma";  // force phantasma for now
 
           console.log("got account: " + JSON.stringify(account));
           let response: IGetAccountResponse = {
@@ -388,7 +300,6 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
             address: account.address,
             avatar: "",
             platform,
-            external,
             balances,
             id,
             success: true,
@@ -400,17 +311,21 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
             data: response,
           });
         }
+        else {
+          console.log('[sw] not valid request for getAccount')
+        }
+
         break;
 
       case "signTx":
-        if (isValidRequest(args)) {
-          const req = getRequestAddress(args);
+        if (await isValidRequest(args)) {
+          const req = await getRequestAddress(args);
           if (req == null) return;
           const address = req.address;
           const version = req.version;
           const token = args[args.length - 1];
 
-          let nexus = "";
+          let nexusTx = "";
           let payload = "";
           let chain = "";
           let script = "";
@@ -419,7 +334,7 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
           let pow = "None";
 
           if (version == "1") {
-            nexus = args[1];
+            nexusTx = args[1];
             chain = args[2];
             script = args[3];
             payload = args[4];
@@ -434,10 +349,10 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
             console.log('pow', pow)
           }
 
-          payload = payload == null || payload == "" ? state.payload : payload;
+          payload = payload == null || payload == "" ? "undef" : payload;
 
           let txdata = JSON.stringify({
-            nexus,
+            nexus: nexusTx,
             chain,
             script,
             payload,
@@ -450,7 +365,7 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
             const url = tab.url || "http://unknown";
             const favicon = tab.favIconUrl || "unknown";
 
-            console.log("[background] Creating sign popup with " + txdata);
+            console.log("[sw] Creating sign popup with " + txdata);
             chrome.windows.create(
               {
                 type: "popup",
@@ -480,8 +395,8 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
         break;
 
       case "signData":
-        if (isValidRequest(args)) {
-          const req = getRequestAddress(args);
+        if (await isValidRequest(args)) {
+          const req = await getRequestAddress(args);
           if (req == null) return;
           const address = req.address;
           const version = req.version;
@@ -498,7 +413,7 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
             const url = tab.url || "http://unknown";
             const favicon = tab.favIconUrl || "unknown";
 
-            console.log("[background] Creating signData popup with " + hexdata);
+            console.log("[sw] Creating signData popup with " + hexdata);
             chrome.windows.create(
               {
                 type: "popup",
@@ -528,12 +443,12 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
         break;
 
       case "invokeScript":
-        if (isValidRequest(args)) {
+        if (await isValidRequest(args)) {
           let chain = args[1]
           let script = args[2];
-
-          const response = await state.api.invokeRawScript(chain, script)
-          console.log('invokeScript', response)
+          console.log('[sw] invokeScript', chain, script)
+          const response = await api.invokeRawScript(chain, script)
+          console.log('[sw] invokeScript response: ', response)
 
           chrome.tabs.sendMessage(msg.tabid, {
             uid: "plsres",
@@ -545,25 +460,23 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
         break;
 
       case "getPeer":
-        await state.check(undefined);
-
+        console.log('[sw] getPeer returning ', api.host)
         chrome.tabs.sendMessage(msg.tabid, {
           uid: "plsres",
           sid: msg.sid,
-          data: { result: state.api.host, id, success: true},
+          data: { result: api.host, id, success: true},
         });
         break;
 
       case "getNexus":
-        await state.check(undefined);
-
+        console.log('[sw] getNexus returning ', nexus)
         chrome.tabs.sendMessage(msg.tabid, {
           uid: "plsres",
           sid: msg.sid,
-          data: { result: state.nexus, id, success: true},
+          data: { result: nexus, id, success: true},
         });
         break;
     }
   }
-  return Promise.resolve("Dummy response to keep the console quiet");
+  sendResponse({ success: true });
 });

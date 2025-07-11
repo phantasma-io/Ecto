@@ -65,14 +65,14 @@
 <script lang="ts">
 import { Component, Vue } from "vue-property-decorator";
 import { Prop } from "vue-property-decorator";
-import { TransactionData } from "@/phan-js";
+import { TransactionData } from "phantasma-ts";
 import {
   EventKind,
   getString,
   getTokenEventData,
   getMarketEventData,
   getInfusionEventData,
-} from "@/phan-js/vm/EventData";
+} from "phantasma-ts";
 import { state } from "@/popup/PopupState";
 import NFTMedia from "@/components/NFTMedia.vue";
 
@@ -406,10 +406,7 @@ export default class extends Vue {
                 " " +
                 formatSymbol(
                   "" +
-                    (data.endAmount != 0
-                      ? data.endAmount
-                      : data.amount
-                    ).toString(),
+                    (data.amount).toString(),
                   data.quoteSymbol
                 ),
               nftId,
@@ -441,10 +438,7 @@ export default class extends Vue {
                 " " +
                 formatSymbol(
                   "" +
-                    (data.endAmount != 0
-                      ? data.endAmount
-                      : data.amount
-                    ).toString(),
+                    (data.amount).toString(),
                   data.quoteSymbol
                 ),
               nftId,

@@ -70,7 +70,19 @@
         <v-btn text @click="snackError = false" color="#1bb7dc">OK</v-btn>
       </v-row>
     </v-sheet>
-
+    <v-fade-transition>
+      <v-sheet
+        v-if="snackInfo"
+        @click="snackInfo = false"
+        elevation="12"
+        rounded="true"
+        class="pa-3 mx-auto cursor-pointer"
+        v-ripple
+        style="min-width: 90%; max-width: 95%; left: 5%; bottom: 40px; position: absolute !important; background-color: #555; z-index: 303; color:white;opacity:0.95; border-radius:8px; font-size:14px"
+      >
+        {{ snackInfoMessage }}
+      </v-sheet>
+    </v-fade-transition>
     <v-footer
       color="#17b1e8"
       tile
@@ -157,7 +169,7 @@
                         data.item.location + " · " + data.item.msecs + " ms"
                       }}</strong>
                       <br />
-                      {{ data.item.url + "/rpc" }}
+                      {{ data.item.url }}
                     </div>
                   </template></v-select
                 ></v-list-item-action-text
@@ -177,13 +189,6 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import {
-  PhantasmaAPI,
-  Account,
-  Transaction,
-  getPrivateKeyFromWif,
-  Balance,
-} from "@/phan-js";
 
 import { LOCALES } from "@/i18n/locales";
 import { defaultLocale } from "@/i18n";
@@ -224,15 +229,17 @@ export default class extends Vue {
   snackErrorMessage = "";
   snackErrorMessageDetails = "";
 
+  snackInfo = false;
+  snackInfoMessage = "";
+
   simnetRpc = "http://localhost:7077/rpc";
   editSimnetRpc = false;
-  testnetRpc = "http://testnet.phantasma.io:7077/rpc";
+  testnetRpc = "https://testnet.phantasma.info/rpc";
   editTestnetRpc = false;
   mainnetRpc = "Auto";
 
   netIndex = 0;
 
-  
   showAdvancedSettings = false;
 
   gasLimitValue: any = { text: '90000 (Default)', value: 90000}
@@ -305,27 +312,50 @@ export default class extends Vue {
       }
     );
 
+    this.$root.$on(
+      "infoMessage",
+      (info: { msg: string; details: string }) => {
+        console.log("Info message: " + info.msg + " with " + info.details);
+        this.snackInfoMessage = info.msg;
+        this.snackInfo = true;
+        setTimeout(() => {
+          this.snackInfo = false;
+        }, 5000);
+      }
+    );
+
     this.$root.$on("checkTx", (tx: string) => {
       this.checkTx(tx, 0)
     });
   }
 
-  checkTx(tx: string, retry: number) {
-      setTimeout(async () => {
+  checkTx(tx: string, retry: number, waitMs: number = 1500) {
+    this.snackInfoMessage = "Checking for transaction...";
+    this.snackInfo = true;
+    setTimeout(async () => {
         if (tx && tx !== "") {
           const error = await state.checkTxError(tx);
           if (error === "pending" && retry < 6) {
-            this.checkTx(tx, retry + 1)
+            this.checkTx(tx, retry + 1, waitMs + 500)
           } else if (error) {
+            console.log('Error checking tx', error)
             let shortError =
               error.length > 120 ? error.substring(0, 120) + "..." : error;
             this.$root.$emit("errorMessage", {
               msg: this.$t("app.errorMessage"),
               details: shortError,
             });
+            this.snackInfo = false;
+          }
+          else {
+            this.$root.$emit("infoMessage", {
+              msg: 'Transaction submitted correctly',
+              details: ""
+            });
+            setTimeout(() => state.refreshCurrentAccount(), 2000);
           }
         }
-      }, 2000);
+      }, waitMs);
 
   }
 
@@ -372,7 +402,10 @@ export default class extends Vue {
   async selectNet(item: string) {
     console.log("selectNet", item);
     state.setNexus(item);
-    if (state.nexus != item) await this.refreshAccount();
+    if (state.nexus != item) {
+      state.isAccountOk = false;
+      await this.refreshAccount();
+    }
   }
 
   async acceptSimnetRpc() {

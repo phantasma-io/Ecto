@@ -293,7 +293,7 @@ import {
   getPrivateKeyFromWif,
   Balance,
   getAddressFromWif,
-} from "@/phan-js";
+} from "phantasma-ts";
 
 import { state } from "@/popup/PopupState";
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
