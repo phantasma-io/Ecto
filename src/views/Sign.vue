@@ -236,8 +236,9 @@ export default class extends Vue {
       tabid,
       sid,
       data: { id, success: false, message: this.messageRejected },
+    }, () => {
+      window.close();
     });
-    window.close();
   }
   async signtx() {
     this.isLoading = true;
@@ -277,7 +278,7 @@ export default class extends Vue {
         data: { hash, id, success: true },
       });
 
-      window.close();
+      setTimeout(() => window.close(), 1000);   // give time to content script to process the response
     } catch (err) {
       this.errorDialog = true;
       this.errorMessage = err;

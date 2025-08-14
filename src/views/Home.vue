@@ -880,7 +880,7 @@ import {
   ScriptBuilder,
   Swap,
   Address,
-} from "phantasma-ts";
+} from "phantasma-sdk-ts";
 
 import {
   state,

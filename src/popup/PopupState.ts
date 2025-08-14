@@ -15,7 +15,7 @@ import {
   signData,
   Swap,
   Token,
-} from "phantasma-ts";
+} from "phantasma-sdk-ts";
 
 export interface ISymbolAmount {
   symbol: string;
@@ -96,7 +96,7 @@ export class PopupState {
 
   isAccountOk = false;
 
-  payload = "4543542d312e362e30";
+  payload = "4543542d312e362e31";
 
   mainetPeers = "https://peers.phantasma.info/mainnet-getpeers.json";
   testnetPeers = "https://peers.phantasma.info/testnet-getpeers.json";
@@ -890,7 +890,7 @@ export class PopupState {
       throw new Error(this.$i18n.t("error.noAccountMatch").toString());
 
     let dt = new Date();
-    dt.setMinutes(dt.getMinutes() + 5 - dt.getTimezoneOffset()); // fix for bug in phantasma-ts
+    dt.setMinutes(dt.getMinutes() + 5);
     console.log(dt);
 
     const tx = new Transaction(

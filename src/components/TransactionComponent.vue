@@ -65,14 +65,14 @@
 <script lang="ts">
 import { Component, Vue } from "vue-property-decorator";
 import { Prop } from "vue-property-decorator";
-import { TransactionData } from "phantasma-ts";
+import { TransactionData } from "phantasma-sdk-ts";
 import {
   EventKind,
   getString,
   getTokenEventData,
   getMarketEventData,
   getInfusionEventData,
-} from "phantasma-ts";
+} from "phantasma-sdk-ts";
 import { state } from "@/popup/PopupState";
 import NFTMedia from "@/components/NFTMedia.vue";
 

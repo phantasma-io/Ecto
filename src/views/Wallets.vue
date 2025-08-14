@@ -156,7 +156,7 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import { Account, getPrivateKeyFromWif } from "phantasma-ts";
+import { Account, getPrivateKeyFromWif } from "phantasma-sdk-ts";
 import ErrorDialog from "@/components/ErrorDialog.vue";
 
 import { state, WalletAccount } from "@/popup/PopupState";

@@ -410,7 +410,7 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import { ScriptBuilder } from "phantasma-ts";
+import { ScriptBuilder } from "phantasma-sdk-ts";
 import { state, TxArgsData } from "@/popup/PopupState";
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
 import NFTMedia from "@/components/NFTMedia.vue";
