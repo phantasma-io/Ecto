@@ -450,7 +450,7 @@ export class PopupState {
           const secsSinceLastUpdate = (now - lastUpdate) / 1000;
           console.log("Last update was ", secsSinceLastUpdate, "secs ago");
           if (secsSinceLastUpdate > 60 * 60 * 2) {
-            let tokens = await this.api.getTokens();
+            let tokens = await this.api.getTokens(null);
             // remove script, we don't need it
             tokens.forEach((t: any) => {
               if (t.script != undefined) delete t.script;

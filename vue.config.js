@@ -31,6 +31,7 @@ const plugins =
 
 module.exports = {
   pages: pagesObj,
+  transpileDependencies: ['phantasma-sdk-ts'],
   configureWebpack: config => {
     config.plugins.push(new CopyWebpackPlugin(plugins));
     config.output.filename = 'js/[name].js';
