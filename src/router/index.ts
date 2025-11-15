@@ -8,6 +8,7 @@ import Authorize from "../views/Authorize.vue";
 import Sign from "../views/Sign.vue";
 import SignData from "../views/SignData.vue";
 import Nfts from "../views/Nfts.vue";
+import SignCarbonTx from "@/views/SignCarbonTx.vue";
 
 Vue.use(VueRouter);
 
@@ -46,6 +47,11 @@ const routes: Array<RouteConfig> = [
     path: "/sign/:token/:id/:tabid/:sid/:url/:favicon/:b64txdata",
     name: "Sign",
     component: Sign,
+  },
+  {
+    path: "/SignCarbonTx/:token/:id/:tabid/:sid/:url/:favicon/:hextxdata",
+    name: "SignCarbonTx",
+    component: SignCarbonTx,
   },
   {
     path: "/signdata/:token/:id/:tabid/:sid/:url/:favicon/:hexdata",

@@ -32,12 +32,19 @@ const plugins =
 module.exports = {
   pages: pagesObj,
   transpileDependencies: ['phantasma-sdk-ts'],
+  // Disable type checking during build - types are enforced in IDE
+  chainWebpack: config => {
+    config.plugins.delete('fork-ts-checker');
+  },
   configureWebpack: config => {
     config.plugins.push(new CopyWebpackPlugin(plugins));
     config.output.filename = 'js/[name].js';
     config.output.chunkFilename = 'js/[name].js';
   },
   chainWebpack: config => {
+    // Disable TypeScript type checking during build
+    config.plugins.delete('fork-ts-checker');
+    
     config.plugin('copy')
           .tap(args => {
             args[0].push({

@@ -15,6 +15,11 @@ import {
   signData,
   Swap,
   Token,
+  CarbonBlob,
+  TxMsgSigner,
+  bytesToHex,
+  PhantasmaKeys,
+  TxMsg,
 } from "phantasma-sdk-ts";
 
 export interface ISymbolAmount {
@@ -908,6 +913,45 @@ export class PopupState {
     const hash = await this.api.sendRawTransaction(txHex.toUpperCase());
     console.log("Returned from sendRawTransaction with res: ", hash);
 
+    return hash;
+  }
+
+  async signCarbonTxWithPassword(
+    txdata: TxMsg,
+    address: string,
+    password: string
+  ) {
+    const account = this.accounts.find((a) => a.address == address);
+    if (!account) throw new Error(this.$i18n.t("error.noAccount").toString());  
+    let wif = "";
+    if (password == "") {
+      if (account.wif) wif = account.wif;
+    } else {
+      if (!account.encKey)
+        throw new Error(this.$i18n.t("error.noEncrypted").toString());
+      const hex = CryptoJS.AES.decrypt(account.encKey, password).toString();
+      for (var i = 0; i < hex.length && hex.substr(i, 2) !== "00"; i += 2)
+        wif += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    }
+    if (!this.isWifValidForAccount(wif))
+      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
+    
+    return await this.signCarbonTx(txdata, wif);
+  }
+
+  async signCarbonTx(txdata: TxMsg, wif: string): Promise<string> {
+    const account = this.currentAccount;
+    if (!account) throw new Error(this.$i18n.t("error.notValid").toString());
+    if (!this.isWifValidForAccount(wif))
+      throw new Error(this.$i18n.t("error.noAccountMatch").toString());
+
+    const keys = PhantasmaKeys.fromWIF(wif);
+    const bytes = TxMsgSigner.signAndSerialize(txdata, keys);
+
+    const txHex = bytesToHex(bytes);
+    console.log("Signed ", txHex);
+    const hash = await this.api.sendCarbonTransaction(txHex.toUpperCase());
+    console.log("Returned from sendRawTransaction with res: ", hash);
     return hash;
   }
 

@@ -206,7 +206,7 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
                   token: authToken,
                   // new in v2
                   nexus: nexus,
-                  version: "2",
+                  version: "4", // v4 to support carbon txs
                   id,
                   success: true,
                 },
@@ -313,6 +313,61 @@ chrome.runtime.onMessage.addListener(async function (msg, sender, sendResponse) 
         }
         else {
           console.log('[sw] not valid request for getAccount')
+        }
+
+        break;
+
+      case "signCarbonTxAndBroadcast":
+        console.log('[sw] signCarbonTxAndBroadcast', args)
+        if (await isValidRequest(args)) {
+          console.log('[sw] valid request for signCarbonTxAndBroadcast')
+          const req = await getRequestAddress(args);
+          if (req == null) return;
+          const address = req.address;
+          const version = req.version;
+          const token = args[args.length - 1];
+
+          let hexTxMsg = args[1];
+          let payload = "";
+
+          if (version !== "4") {
+            console.error('[background] signCarbonTxAndBroadcast only supports v4 requests')
+          }
+          console.log('[sw] signCarbonTxAndBroadcast v4')
+
+          payload = payload == null || payload == "" ? "undef" : payload;
+
+          console.log('token', token, 'id', id, 'tabid', msg.tabid, 'sid', msg.sid, 'hexTxMsg', hexTxMsg)
+
+          chrome.tabs.get(msg.tabid, (tab) => {
+            const url = tab.url || "http://unknown";
+            const favicon = tab.favIconUrl || "unknown";
+
+            console.log("[sw] Creating sign carbon popup with " + hexTxMsg);
+            chrome.windows.create(
+              {
+                type: "popup",
+                url:
+                  "popup.html?/#/SignCarbonTx/" +
+                  token +
+                  "/" +
+                  id +
+                  "/" +
+                  msg.tabid +
+                  "/" +
+                  msg.sid +
+                  "/" +
+                  btoa(url).replace(/\//g, '_') +
+                  "/" +
+                  btoa(favicon).replace(/\//g, '_') +
+                  "/" +
+                  hexTxMsg,
+                width: 320,
+                height: 600,
+              },
+              (wnd) => { }
+            );
+          });
         }
 
         break;
