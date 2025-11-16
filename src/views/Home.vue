@@ -122,7 +122,7 @@
                     <span v-if="!state.balanceShown"></span>
                     <span v-else>SOULMASTER</span>
                   </div>
-                  <v-img :src="getAssetIcon(item)" max-width="40px"></v-img>
+                  <v-img :src="getAssetIcon(item)" max-width="40px" min-width="40px"></v-img>
                   <div
                     style="margin:10px 1px 10px 15px;width:160px;font-size:16px"
                   >
@@ -1126,7 +1126,15 @@ export default class extends Vue {
   }
 
   getAssetIcon(item: Balance) {
-    if (this.isNewLogo(item.symbol.toLowerCase())) return `assets/default.png`;
+    if (this.isNewLogo(item.symbol.toLowerCase())) {
+      const token: any = state.getToken(item.symbol)
+      if (token) {
+        const metadata: {key: string; value: string}[] = token.metadata ?? [];
+        const logoUrl = metadata.find((m) => m.key === "icon")?.value;
+        return logoUrl ? logoUrl : `assets/default.png`;
+      }
+      return `assets/default.png`;
+    } 
     return `assets/${item.symbol}.png`;
   }
 
