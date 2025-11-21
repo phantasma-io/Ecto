@@ -17,7 +17,12 @@ module.exports = {
     'no-debugger': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
     '@typescript-eslint/no-empty-function': 'off',
     '@typescript-eslint/interface-name-prefix': 'off',
-
+    '@typescript-eslint/ban-types': ['error', {
+      'types': {
+        'BigInt': false
+      },
+      'extendDefaults': true
+    }],
     '@typescript-eslint/type-annotation-spacing': 'off',
     'no-var': 'off',
     'no-undef': 'off',

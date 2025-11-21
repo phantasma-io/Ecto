@@ -1,4 +1,5 @@
 const CopyWebpackPlugin = require("copy-webpack-plugin");
+const webpack = require("webpack");
 const path = require("path");
 
 // Generate pages object
@@ -19,27 +20,37 @@ const plugins =
     ? [
         {
           from: path.resolve("src/manifest.production.json"),
-          to: `${path.resolve("dist")}/manifest.json`
+          to: `${path.resolve("dist")}/manifest.json`,
+          toType: "file"
         }
       ]
     : [
         {
           from: path.resolve("src/manifest.development.json"),
-          to: `${path.resolve("dist")}/manifest.json`
+          to: `${path.resolve("dist")}/manifest.json`,
+          toType: "file"
         }
       ];
 
 module.exports = {
   pages: pagesObj,
   transpileDependencies: ['phantasma-sdk-ts'],
-  // Disable type checking during build - types are enforced in IDE
-  chainWebpack: config => {
-    config.plugins.delete('fork-ts-checker');
-  },
   configureWebpack: config => {
-    config.plugins.push(new CopyWebpackPlugin(plugins));
+    config.plugins.push(new CopyWebpackPlugin({ patterns: plugins }));
+    config.plugins.push(
+      new webpack.ProvidePlugin({
+        process: 'process/browser',
+        Buffer: ['buffer', 'Buffer']
+      })
+    );
     config.output.filename = 'js/[name].js';
     config.output.chunkFilename = 'js/[name].js';
+    // Add Node.js polyfills for Webpack 5
+    config.resolve.fallback = {
+      crypto: require.resolve('crypto-browserify'),
+      stream: require.resolve('stream-browserify'),
+      buffer: require.resolve('buffer/')
+    };
   },
   chainWebpack: config => {
     // Disable TypeScript type checking during build
@@ -47,11 +58,13 @@ module.exports = {
     
     config.plugin('copy')
           .tap(args => {
-            args[0].push({
+            args[0].patterns.push({
               from: path.resolve(__dirname, 'src/_locales'),
               to: path.resolve(__dirname, 'dist/_locales'),
               toType: 'dir',
-              ignore: ['.DS_Store']
+              globOptions: {
+                ignore: ['.DS_Store']
+              }
             })
             return args
           })

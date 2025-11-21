@@ -101,7 +101,7 @@ export class PopupState {
 
   isAccountOk = false;
 
-  payload = "4543542d312e362e31";
+  payload = "4543542d312e362e32"; // "ECT-1.6.2" in hex
 
   mainetPeers = "https://peers.phantasma.info/mainnet-getpeers.json";
   testnetPeers = "https://peers.phantasma.info/testnet-getpeers.json";
