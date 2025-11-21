@@ -190,7 +190,7 @@
                       style="padding: 0 6px;"
                       v-if="state.isNFT(item.symbol)"
                       @click="goto('/nfts/' + item.symbol + '/view')"
-                      :disabled="true || item.amount == '0'"
+                      :disabled="item.amount == '0'"
                       ><v-icon>mdi-eye</v-icon> {{ $t("home.view") }}</v-btn
                     >
                     <v-btn
@@ -207,7 +207,7 @@
                       text
                       style="padding: 0 6px;"
                       @click="transferAsset($event, item)"
-                      :disabled="state.isNFT(item.symbol) || item.amount == '0'"
+                      :disabled="item.amount == '0'"
                       ><v-icon>mdi-export</v-icon> {{ $t("home.send") }}</v-btn
                     >
                   </div>

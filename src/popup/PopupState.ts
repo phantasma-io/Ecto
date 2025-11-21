@@ -1119,14 +1119,13 @@ export class PopupState {
   async queryNfts(ids: string[], token: string) {
     const allNftsToQuery = [];
     console.log('ids', ids, 'token', token)
-    return;  // do not query nfts for now
-
+    
     for (let k = 0; k < ids.length; ++k) {
       const id = ids[k];
       const lookupId = token + "@" + id;
       const nft = this.nfts[lookupId];
       console.log('nft', nft)
-      if (!nft || !nft.img || nft.img.startsWith("placeholder-")) {
+      if (!nft || !nft.img || nft.img=="" || nft.img.startsWith("placeholder-")) {
         // search for it
         allNftsToQuery.push(id);
       }
@@ -1176,15 +1175,17 @@ export class PopupState {
         console.log("Got nft", nft);
 
         const imgUrlUnformated = nft.properties.find(
-          (kv) => kv.Key == "ImageURL"
-        )?.Value;
+          (kv) => kv.key == "imageURL"
+        )?.value;
 
         let nftDef = {
           id: nftId,
+          carbonTokenId: nft.carbonTokenId,
+          carbonNftAddress: nft.carbonNftAddress,
           mint: nft.mint,
           img: imgUrlUnformated,
-          type: nft.properties.find((kv) => kv.Key == "Type")?.Value,
-          name: nft.properties.find((kv) => kv.Key == "Name")?.Value,
+          type: nft.properties.find((kv) => kv.key == "type")?.value,
+          name: nft.properties.find((kv) => kv.key == "name")?.value,
           infusion: nft.infusion,
         };
         console.log('')

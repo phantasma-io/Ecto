@@ -156,19 +156,7 @@
                     >
                       <v-icon
                         @click.native="
-                          openWindow(
-                            state.isMainnet
-                              ? 'https://ghostmarket.io/asset/pha/' +
-                                  sendSymbol.toLowerCase() +
-                                  '/' +
-                                  item.id +
-                                  '/'
-                              : 'https://testnet.ghostmarket.io/asset/phat/' +
-                                  sendSymbol.toLowerCase() +
-                                  '/' +
-                                  item.id +
-                                  '/'
-                          )
+                          openWindow(state.api.host.replace('/rpc', '/api/v1/GetNFT?symbol=') +sendSymbol + '&IDtext=' + item.id + '&extended=true')
                         "
                         >mdi-open-in-new</v-icon
                       >
@@ -410,7 +398,7 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import { ScriptBuilder } from "phantasma-sdk-ts";
+import { Balance, ScriptBuilder } from "phantasma-sdk-ts";
 import { state, TxArgsData } from "@/popup/PopupState";
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
 import NFTMedia from "@/components/NFTMedia.vue";
