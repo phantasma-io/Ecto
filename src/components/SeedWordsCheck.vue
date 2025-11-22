@@ -5,9 +5,10 @@
     v-row.my-0(v-for="(i, idx) in wordsToCheck" :key="idx")
         v-text-field( filled compact
             v-model="inputWords[idx]"
-            :label="`Seed word #${i+1}`"
+            :label="`Seed word #${i+1}`+(idx == 0 ? ' (or paste full seed phrase here)' : '')"
             :rules="[ value => words[i] == value || 'Wrong word']"
             @input="checkAll"
+            @paste="onPaste"
         )
 
 </template>
@@ -42,6 +43,28 @@ export default class extends Vue {
                 return
         }
         this.$emit('accept')
+    }
+
+    onPaste(e: ClipboardEvent) {
+        try {
+            const text = e.clipboardData ? e.clipboardData.getData('text') : (window as any).clipboardData.getData('Text');
+            if (!text) return;
+            const parts = text.trim().split(/\s+/);
+            if (!(parts.length === 12 || parts.length === 24)) return;
+
+            // Populate the inputWords according to wordsToCheck mapping
+            for (let i = 0; i < this.wordsToCheck.length; ++i) {
+                const wordIndex = this.wordsToCheck[i];
+                this.inputWords[i] = parts[wordIndex] || '';
+            }
+
+            // Trigger validation
+            this.$nextTick(() => this.checkAll());
+            // prevent default paste into the input so the full mnemonic doesn't appear there
+            e.preventDefault();
+        } catch (err) {
+            // ignore paste errors
+        }
     }
 }
 </script>

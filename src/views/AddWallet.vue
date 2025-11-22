@@ -117,6 +117,12 @@
           </v-container>
           <v-container v-if="createStep === 1">
             <SeedWords :words="seedWords" />
+            <v-row class="mb-3">
+                <v-btn class="mx-auto" text @click="copySeedWords">
+                  {{ 'Copy to clipboard' }}
+                  <v-icon right>mdi-content-copy</v-icon>
+                </v-btn>
+            </v-row>
             <v-btn block primary @click="copySeedWordsDialog = true">
               {{ $t("addWallet.importLong") }}
             </v-btn>
@@ -464,6 +470,12 @@ export default class extends Vue {
   copyWifToClipboard() {
     navigator.clipboard.writeText(this.newWif);
   }
+
+  copySeedWords() {
+    const text = (this.seedWords || []).join(' ');
+    navigator.clipboard.writeText(text);
+  }
+
 }
 </script>
 
