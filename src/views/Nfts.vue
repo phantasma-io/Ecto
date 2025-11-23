@@ -554,6 +554,7 @@ export default class extends Vue {
     for (let i = 0; i < idsNfts.length; ++i) {
       const key = this.sendSymbol + "@" + idsNfts[i];
       const val = this.state.nfts[key];
+      if (!val.name) val.name = this.sendSymbol + " #" + idsNfts[i];
       if (val) list.push(val);
     }
 
