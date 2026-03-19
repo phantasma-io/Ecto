@@ -45,11 +45,13 @@ module.exports = {
     );
     config.output.filename = 'js/[name].js';
     config.output.chunkFilename = 'js/[name].js';
-    // Add Node.js polyfills for Webpack 5
+    // `crypto-browserify` pulls an optional `vm` dependency through `asn1.js`.
+    // We do not want a dead browser polyfill for that Node module in the extension bundle.
     config.resolve.fallback = {
       crypto: require.resolve('crypto-browserify'),
       stream: require.resolve('stream-browserify'),
-      buffer: require.resolve('buffer/')
+      buffer: require.resolve('buffer/'),
+      vm: false
     };
   },
   chainWebpack: config => {

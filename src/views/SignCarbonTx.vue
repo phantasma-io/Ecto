@@ -137,7 +137,8 @@
 import Vue from "vue";
 import Component from "vue-class-component";
 import { state } from "@/popup/PopupState";
-import { CarbonBinaryReader, hexToBytes, TxMsg } from "phantasma-sdk-ts";
+import { TxMsg, CarbonBinaryReader } from "phantasma-sdk-ts/core/types/index";
+import { hexToBytes } from "phantasma-sdk-ts/core/utils/index";
 
 @Component({})
 export default class extends Vue {
