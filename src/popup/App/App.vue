@@ -194,6 +194,7 @@ import { LOCALES } from "@/i18n/locales";
 import { defaultLocale } from "@/i18n";
 import { state } from "@/popup/PopupState";
 import { Watch } from "vue-property-decorator";
+import { formatErrorDetails } from "@/utils/errors";
 
 @Component({})
 export default class extends Vue {
@@ -254,6 +255,38 @@ export default class extends Vue {
   gasPriceItems = [ 
     { text: '100000 (Default)', value: 100000},
   ]
+
+  // Vue 2 popup failures often degrade into a blank screen with very little signal.
+  // Capture browser-level and component-level errors here so testers see actionable details.
+  onWindowError = (event: ErrorEvent) => {
+    this.reportUnexpectedError("Unexpected popup error", event.error ?? event.message);
+  };
+
+  onUnhandledRejection = (event: PromiseRejectionEvent) => {
+    this.reportUnexpectedError("Unhandled popup rejection", event.reason);
+  };
+
+  created() {
+    window.addEventListener("error", this.onWindowError);
+    window.addEventListener("unhandledrejection", this.onUnhandledRejection);
+  }
+
+  beforeDestroy() {
+    window.removeEventListener("error", this.onWindowError);
+    window.removeEventListener("unhandledrejection", this.onUnhandledRejection);
+  }
+
+  errorCaptured(err: Error, vm: Vue, info: string) {
+    this.reportUnexpectedError(`UI error: ${info}`, err);
+    return false;
+  }
+
+  reportUnexpectedError(message: string, err: unknown) {
+    this.snackErrorMessage = message;
+    this.snackErrorMessageDetails = formatErrorDetails(err);
+    this.snackError = true;
+    console.error(`[Ecto] ${message}`, err);
+  }
 
 
   @Watch("state.mainnetRpcList", { deep: true, immediate: true })

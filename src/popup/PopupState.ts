@@ -1,26 +1,29 @@
 import WIF from "wif";
 import fetch from "cross-fetch";
 import * as CryptoJS from "crypto-js";
-import createHash from "create-hash";
 
 import {
   PhantasmaAPI,
   Account,
-  Transaction,
-  getPrivateKeyFromWif,
-  getAddressFromWif,
   Paginated,
   AccountTransactions,
   Balance,
-  signData,
   Swap,
   Token,
-  CarbonBlob,
+} from "phantasma-sdk-ts/core/rpc/index";
+import {
+  Transaction,
+  getPrivateKeyFromWif,
+  getAddressFromWif,
+  signData,
+} from "phantasma-sdk-ts/core/tx/index";
+import { bytesToHex } from "phantasma-sdk-ts/core/utils/index";
+import {
   TxMsgSigner,
-  bytesToHex,
   PhantasmaKeys,
   TxMsg,
-} from "phantasma-sdk-ts";
+} from "phantasma-sdk-ts/core/types/index";
+import { formatError, logError } from "@/utils/errors";
 
 export interface ISymbolAmount {
   symbol: string;
@@ -71,6 +74,66 @@ export interface NexusData<T> {
   simnetLastUpdate: number;
 }
 
+function createEmptyAccountData(address: string): Account {
+  return {
+    address,
+    name: "anonymous",
+    stakes: {
+      amount: "0",
+      time: 0,
+      unclaimed: "0",
+    },
+    stake: "0",
+    unclaimed: "0",
+    relay: "",
+    validator: "Invalid",
+    storage: {
+      available: 0,
+      used: 0,
+      avatar: "",
+      archives: [],
+    },
+    balances: [],
+    txs: [],
+  };
+}
+
+function normalizeAccountData(address: string, data: unknown): Account {
+  const fallback = createEmptyAccountData(address);
+  // RPC payloads are not stable enough to trust directly during import/refresh.
+  // Normalize them once here so the rest of the popup can assume a complete shape.
+  const normalized =
+    data && typeof data === "object" ? ({ ...(data as Account) } as Account) : fallback;
+
+  if (!normalized.address || typeof normalized.address !== "string") {
+    console.warn("[PopupState] RPC returned account payload without address", {
+      requestedAddress: address,
+      payload: data,
+    });
+    normalized.address = address;
+  }
+
+  if (normalized.address !== address) {
+    console.warn("[PopupState] RPC returned mismatched account address", {
+      requestedAddress: address,
+      returnedAddress: normalized.address,
+    });
+  }
+
+  if (!normalized.name) normalized.name = fallback.name;
+  if (!normalized.stakes) normalized.stakes = fallback.stakes;
+  if (!normalized.stake) normalized.stake = normalized.stakes.amount || fallback.stake;
+  if (!normalized.unclaimed)
+    normalized.unclaimed = normalized.stakes.unclaimed || fallback.unclaimed;
+  if (!normalized.relay) normalized.relay = fallback.relay;
+  if (!normalized.validator) normalized.validator = fallback.validator;
+  if (!normalized.storage) normalized.storage = fallback.storage;
+  if (!Array.isArray(normalized.balances)) normalized.balances = [];
+  if (!Array.isArray(normalized.txs)) normalized.txs = [];
+
+  return normalized;
+}
+
 export class PopupState {
   api = new PhantasmaAPI("https://pharpc1.phantasma.info/rpc", undefined as any, "none");
 
@@ -101,7 +164,7 @@ export class PopupState {
 
   isAccountOk = false;
 
-  payload = "4543542d312e362e32"; // "ECT-1.6.2" in hex
+  payload = "4543542d322e302e30"; // "ECT-2.0.0" in hex
 
   mainetPeers = "https://peers.phantasma.info/mainnet-getpeers.json";
   testnetPeers = "https://peers.phantasma.info/testnet-getpeers.json";
@@ -410,12 +473,11 @@ export class PopupState {
     return new Promise((resolve, reject) => {
       chrome.storage.local.get(async (items) => {
         console.log("[PopupState] Get local storage");
-        this._currentAccountIndex = items.currentAccountIndex
-          ? items.currentAccountIndex
-          : 0;
-        this._accounts = items.accounts
-          ? items.accounts.filter((a: WalletAccount) => a.type !== "wif")
-          : [];
+        this._currentAccountIndex =
+          typeof items.currentAccountIndex === "number"
+            ? items.currentAccountIndex
+            : 0;
+        this._accounts = items.accounts ? items.accounts : [];
         this._authorizations = items.authorizations ? items.authorizations : [];
         // this._pendingSwaps = items.pendingSwaps ? items.pendingSwaps : [];
         this._currency = items.currency ? items.currency : "USD";
@@ -425,10 +487,6 @@ export class PopupState {
         this.nfts = items.nfts ? items.nfts : {};
 
         if ($i18n) $i18n.locale = this.locale;
-
-        this._accounts = items.accounts
-          ? items.accounts.filter((a: WalletAccount) => a.type !== "wif")
-          : [];
 
         if (items.tokens) this._tokens = items.tokens;
 
@@ -446,6 +504,24 @@ export class PopupState {
 
         this.api.setNexus(this._nexus);
         this.updateRpc();
+
+        if (this._accounts.length === 0) {
+          this._currentAccountIndex = 0;
+        } else if (
+          this._currentAccountIndex < 0 ||
+          this._currentAccountIndex >= this._accounts.length
+        ) {
+          // Persist the repaired index immediately so reloads do not keep reviving
+          // a stale selection after accounts were removed or storage was corrupted.
+          console.warn("[PopupState] Repairing invalid currentAccountIndex", {
+            currentAccountIndex: this._currentAccountIndex,
+            accounts: this._accounts.length,
+          });
+          this._currentAccountIndex = 0;
+          chrome.storage.local.set({
+            currentAccountIndex: this._currentAccountIndex,
+          });
+        }
 
         try {
           // query tokens info if needed for current nexus
@@ -581,14 +657,31 @@ export class PopupState {
   }
 
   async getAccountData(address: string): Promise<Account> {
-    const data = await this.api.getAccount(address);
+    let data: Account;
 
-    if (!data.balances) {
-      data.balances = [];
+    try {
+      data = await this.api.getAccount(address);
+    } catch (err) {
+      throw new Error(
+        `Could not fetch account ${address} from ${this.api.host}: ${formatError(err)}`
+      );
     }
 
-    if (!data.balances.find((b) => b.symbol == "SOUL"))
-      data.balances.unshift({
+    const dataAny = data as any;
+    if (!dataAny || dataAny.error) {
+      throw new Error(
+        `RPC returned invalid account payload for ${address} from ${this.api.host}`
+      );
+    }
+
+    const normalized = normalizeAccountData(address, data);
+
+    if (!normalized.balances) {
+      normalized.balances = [];
+    }
+
+    if (!normalized.balances.find((b) => b.symbol == "SOUL"))
+      normalized.balances.unshift({
         chain: "main",
         symbol: "SOUL",
         amount: "0",
@@ -596,7 +689,7 @@ export class PopupState {
       });
 
     // make sure SOUL and KCAL are first
-    data.balances = data.balances.sort((a, b) => {
+    normalized.balances = normalized.balances.sort((a, b) => {
       if (a.symbol == "SOUL") return -1;
       if (b.symbol == "SOUL") return 1;
       if (a.symbol == "KCAL") return -1;
@@ -604,9 +697,9 @@ export class PopupState {
       return a.symbol.localeCompare(b.symbol);
     });
 
-    console.log("Account data", data);
+    console.log("Account data", normalized);
 
-    return data;
+    return normalized;
   }
 
   async addAccount(addressOrName: string): Promise<void> {
@@ -660,7 +753,17 @@ export class PopupState {
 
   async addAccountWithWif(wif: string, password: string): Promise<void> {
     let address = getAddressFromWif(wif);
-    const accountData = await this.getAccountData(address);
+    let accountData = createEmptyAccountData(address);
+    try {
+      accountData = await this.getAccountData(address);
+    } catch (err) {
+      // Import must still succeed when RPC is unavailable; the next refresh can
+      // backfill balances and metadata once connectivity recovers.
+      logError("Error getting account data during WIF import", err, {
+        address,
+        rpc: this.api.host,
+      });
+    }
     const hasPass = password != null && password != "";
     const matchAccount = this.accounts.filter(
       (a) => a.address == accountData.address
@@ -698,34 +801,17 @@ export class PopupState {
   async addAccountWithHex(hex: string, password: string): Promise<void> {
     let pk = Buffer.from(hex, "hex");
     const wif = WIF.encode(128, pk, true);
-    let address = getAddressFromWif(wif);    
-    // empty account data
-    let accountData: Account = {
-      address,
-      name: "anonymous",
-      stakes: {
-          amount: "0",
-          time: 0,
-          unclaimed: "0"
-      },
-      stake: "0",
-      unclaimed: "0",
-      relay: "",
-      validator: "Invalid",
-      storage: {
-          available: 0,
-          used: 0,
-          avatar: "",
-          archives: []
-      },
-      balances: [],
-      txs: []
-    };
+    let address = getAddressFromWif(wif);
+    let accountData: Account = createEmptyAccountData(address);
     try {
       accountData = await this.getAccountData(address);
     } catch (err) {
-      // still add the account even if balances are not available now
-      console.error("Error getting account data", err);
+      // Mirror WIF import behavior: keep the account locally even when the RPC
+      // cannot hydrate balances yet, otherwise valid private keys become unimportable.
+      logError("Error getting account data during hex import", err, {
+        address,
+        rpc: this.api.host,
+      });
     }
     const matchAccount = this.accounts.filter(
       (a) => a.address == accountData.address
@@ -788,6 +874,9 @@ export class PopupState {
   async refreshCurrentAccount(): Promise<void> {
     const account = this.currentAccount;
     if (!account) return;
+    if (!account.address) {
+      throw new Error("Current account is missing address");
+    }
 
     console.log(
       "Refreshing account " + account.address + " on " + this.api.host

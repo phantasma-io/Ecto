@@ -294,12 +294,9 @@
 import Vue from "vue";
 import Component from "vue-class-component";
 import {
-  Account,
-  Transaction,
   getPrivateKeyFromWif,
-  Balance,
   getAddressFromWif,
-} from "phantasma-sdk-ts";
+} from "phantasma-sdk-ts/core/tx/index";
 
 import { state } from "@/popup/PopupState";
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
@@ -309,6 +306,7 @@ import SeedWordsCheck from "@/components/SeedWordsCheck.vue";
 import WIF from "wif";
 import * as bip39 from 'bip39'
 import { hdkey }from 'ethereumjs-wallet';
+import { formatError } from "@/utils/errors";
 
 @Component({
   components: {
@@ -357,11 +355,22 @@ export default class extends Vue {
     };
   }
 
+  showImportError(fallbackMessage: string, err: unknown) {
+    const details = logError("Wallet import failed", err, {
+      addressOrName: this.addressOrName,
+      wifLength: this.wif.length,
+      wordCount: this.wif.trim() === "" ? 0 : this.wif.trim().split(/\s+/).length,
+    });
+    this.errorMessage = `${fallbackMessage}: ${details}`;
+    this.errorDialog = true;
+  }
+
   async importWallet() {
     console.log("Going to import wallet");
     this.errorMessage1 = this.$i18n.t("addWallet.errorMessage1").toString();
     this.errorMessage2 = this.$i18n.t("addWallet.errorMessage2").toString();
     this.errorMessage3 = this.$i18n.t("addWallet.errorMessage3").toString();
+    let importSucceeded = false;
     const words = this.wif.split(' ').length
     if (words == 12 || words == 24) {
       console.log("Using seed words");
@@ -372,8 +381,7 @@ export default class extends Vue {
         console.log("Derivation is ok");
       } catch (err) {
         console.log("Error importing seed words");
-        this.errorMessage = "Error importing seed words";
-        this.errorDialog = true;
+        this.showImportError("Error importing seed words", err);
       }
       this.walletQuantityDialog = true
       console.log("walletQuantity dialog show");
@@ -382,20 +390,20 @@ export default class extends Vue {
     else if (this.wif.length == 52 && this.password.length >= 6) {
       try {
         this.isLoading = true;
-        let account = await state.addAccountWithWif(this.wif, this.password);
+        await state.addAccountWithWif(this.wif, this.password);
+        importSucceeded = true;
         this.$router.push("/");
       } catch (err) {
-        this.errorMessage = this.errorMessage1;
-        this.errorDialog = true;
+        this.showImportError(this.errorMessage1, err);
       }
     } else if (this.wif.length == 64 && this.password.length >= 6) {
       try {
         this.isLoading = true;
-        let account = await state.addAccountWithHex(this.wif, this.password);
+        await state.addAccountWithHex(this.wif, this.password);
+        importSucceeded = true;
         this.$router.push("/");
       } catch (err) {
-        this.errorMessage = this.errorMessage2;
-        this.errorDialog = true;
+        this.showImportError(this.errorMessage2, err);
       }
     } else if (this.addressOrName.length >= 52) {
       this.errorMessage = this.errorMessage3;
@@ -403,19 +411,23 @@ export default class extends Vue {
     } else {
       try {
         this.isLoading = true;
-        let account = await state.addAccount(this.addressOrName);
+        await state.addAccount(this.addressOrName);
+        importSucceeded = true;
         this.$router.push("/");
       } catch (err) {
-        this.errorMessage = this.errorMessage3;
-        this.errorDialog = true;
+        this.showImportError(this.errorMessage3, err);
       }
     }
-    this.createStep = 0;
-    this.wif = "";
-    this.password = "";
-    this.newWif = "";
-    this.newHex = "";
-    this.newAddress = "";
+    // Keep the submitted secret on screen after failures so the tester can inspect or fix it
+    // without retyping a long WIF/seed phrase every time.
+    if (importSucceeded) {
+      this.createStep = 0;
+      this.wif = "";
+      this.password = "";
+      this.newWif = "";
+      this.newHex = "";
+      this.newAddress = "";
+    }
     this.isLoading = false;
   }
 
@@ -454,11 +466,9 @@ export default class extends Vue {
       try {
         this.isLoading = true;
         console.log('adding account with', wallet.getPrivateKeyString().substr(2), this.password)
-        let account = await state.addAccountWithHex(wallet.getPrivateKeyString().substr(2), this.password);
+        await state.addAccountWithHex(wallet.getPrivateKeyString().substr(2), this.password);
       } catch (err) {
-        console.error(err)
-        this.errorMessage = this.errorMessage2;
-        this.errorDialog = true;
+        this.showImportError(this.errorMessage2 || formatError(err), err);
       }
     }
     this.wif = ''

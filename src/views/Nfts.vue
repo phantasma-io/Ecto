@@ -398,10 +398,11 @@
 <script lang="ts">
 import Vue from "vue";
 import Component from "vue-class-component";
-import { Balance, ScriptBuilder } from "phantasma-sdk-ts";
+import { ScriptBuilder } from "phantasma-sdk-ts/core/vm/index";
 import { state, TxArgsData } from "@/popup/PopupState";
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
 import NFTMedia from "@/components/NFTMedia.vue";
+import { formatError, logError } from "@/utils/errors";
 
 @Component({ components: { ErrorDialog: ErrorDialogVue, NFTMedia } })
 export default class extends Vue {
@@ -478,8 +479,23 @@ export default class extends Vue {
     console.log("sendSymbol", this.sendSymbol);
     console.log("burnSymbol", this.burnSymbol);
 
-    await state.check(this.$parent.$i18n);
-    this.isLoading = false;
+    try {
+      await state.check(this.$parent.$i18n);
+
+      if (!state.hasAccount || !state.currentAccount) {
+        this.$router.push("/addwallet");
+        return;
+      }
+    } catch (err) {
+      logError("NFT view failed to initialize", err, {
+        rpc: state.api.host,
+        currentAccountAddress: state.currentAccount?.address ?? null,
+      });
+      this.errorMessage = `Could not load NFTs: ${formatError(err)}`;
+      this.errorDialog = true;
+    } finally {
+      this.isLoading = false;
+    }
 
     this.$root.$on("loading", (value: boolean) => {
       this.isLoading = value;
@@ -581,6 +597,8 @@ export default class extends Vue {
   }
 
   get accountSendList() {
+    if (!this.account) return [];
+
     return this.state.accounts
       .filter((a) => a.address !== this.account!.address)
       .map((a) => {

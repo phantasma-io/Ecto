@@ -875,12 +875,12 @@ import Vue from "vue";
 import Component from "vue-class-component";
 import {
   getPrivateKeyFromWif,
+} from "phantasma-sdk-ts/core/tx/index";
+import {
   Balance,
   TransactionData,
-  ScriptBuilder,
-  Swap,
-  Address,
-} from "phantasma-sdk-ts";
+} from "phantasma-sdk-ts/core/rpc/index";
+import { ScriptBuilder } from "phantasma-sdk-ts/core/vm/index";
 
 import {
   state,
@@ -889,6 +889,7 @@ import {
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
 import TransactionComponent from "@/components/TransactionComponent.vue";
 import { Watch } from "vue-property-decorator";
+import { formatError, logError } from "@/utils/errors";
 
 @Component({
   components: { ErrorDialog: ErrorDialogVue, TransactionComponent },
@@ -945,12 +946,28 @@ export default class extends Vue {
 
   async mounted() {
     (window as any).state = state;
-    await state.check(this.$parent.$i18n);
-    await Promise.all([
-      this.state.refreshCurrentAccount(),
-      this.state.fetchRates(),
-    ]);
-    this.isLoading = false;
+    try {
+      await state.check(this.$parent.$i18n);
+
+      if (!this.state.hasAccount || !this.state.currentAccount) {
+        this.$router.push("/addwallet");
+        return;
+      }
+
+      await Promise.all([
+        this.state.refreshCurrentAccount(),
+        this.state.fetchRates(),
+      ]);
+    } catch (err) {
+      logError("Home screen failed to initialize", err, {
+        rpc: this.state.api.host,
+        currentAccountAddress: this.state.currentAccount?.address ?? null,
+      });
+      this.errorMessage = `Could not load wallet: ${formatError(err)}`;
+      this.errorDialog = true;
+    } finally {
+      this.isLoading = false;
+    }
 
     console.log("all loaded with " + JSON.stringify(this.account));
 
@@ -983,6 +1000,8 @@ export default class extends Vue {
   }
 
   get accountSendList() {
+    if (!this.account) return [];
+
     return this.state.accounts
       .filter((a) => a.address !== this.account!.address)
       .map((a) => {

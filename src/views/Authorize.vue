@@ -85,6 +85,7 @@ import Vue from "vue";
 import Component from "vue-class-component";
 import { Watch } from "vue-property-decorator";
 import { state, WalletAccount } from "@/popup/PopupState";
+import { formatError, logError } from "@/utils/errors";
 
 @Component({})
 export default class extends Vue {
@@ -102,7 +103,24 @@ export default class extends Vue {
   async mounted() {
     console.log("authorize");
 
-    await state.check(this.$parent.$i18n);
+    try {
+      await state.check(this.$parent.$i18n);
+
+      if (!state.hasAccount || !state.currentAccount) {
+        this.$router.push("/addwallet");
+        return;
+      }
+    } catch (err) {
+      logError("Authorize view failed to initialize", err, {
+        currentAccountAddress: state.currentAccount?.address ?? null,
+      });
+      this.$root.$emit("errorMessage", {
+        msg: "Could not load authorization request",
+        details: formatError(err),
+      });
+      this.$router.push("/addwallet");
+      return;
+    }
 
     this.authorizeForItems = [
       this.$i18n.t("authorize.periodCurrent").toString(),
@@ -116,16 +134,12 @@ export default class extends Vue {
     state.accounts.forEach((account) => {
       this.authorizeAccounts.push(account.address);
     });
-    this.authorizeAccount = state.currentAccount!.address;
+    this.authorizeAccount = state.currentAccount.address;
 
     this.url = atob(this.$route.params.url);
     this.faviconUrl = atob(this.$route.params.favicon);
     this.hostname = new URL(this.url).hostname;
     this.domain = new URL(this.url).protocol + "//" + this.hostname;
-
-    if (!state.hasAccount) {
-      this.$router.push("/addwallet");
-    }
   }
 
   get accountLabel() {
