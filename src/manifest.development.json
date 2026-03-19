@@ -3,7 +3,8 @@
   "name": "__MSG_appName__",
   "description": "__MSG_appDesc__",
   "default_locale": "en",
-  "version": "1.6.2",
+  "version": "2.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyyu+pdwOytu0FflByeuWI1lml9iSxZIpZAtUxCwQO5Fo5puH2INDTm1E+A/7EHajYBwMJgQvSpEwNUIbMxrgCQnoY6Z7Tj9Pguxt6NVp/pybL9To8DL/ZS/rc473yXN3WeLfsUiV4XwLMPYGSFZfR64TMEITB+dAS3w7/0lSXSySN2wz7k1Ez6zYF6YjCku3kmiO6b7FM3KC7eIhVaKJraNEWN+tuSmfaz3gYqAXKfT0Mw5EV7Yhs2ROGX85uDbAUM851YfSgArgkUfMDynfYxuZeL0iCmgobS2ai7NCufRNoKIDQZL/mmtxOiEJVCZV7d1G0RSSH3C3l0AeqUGtVwIDAQAB",
   "action": {
     "default_icon": "icon.png",
     "default_popup": "popup.html"
