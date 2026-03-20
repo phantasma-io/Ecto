@@ -700,17 +700,17 @@
         <v-card-title class="headline">{{ $t("home.authorize") }}</v-card-title>
 
         <v-card-text>
-          <span v-if="needsWif">
+          <span v-if="requiresManualWif">
             {{ $t("home.insertWIF") }}
           </span>
-          <span v-if="needsPass">
+          <span v-if="requiresPassword">
             {{ $t("home.insertPassword") }}
           </span>
           <v-spacer class="ma-4" />
 
           <v-form
             class="mt-3"
-            v-if="needsWif"
+            v-if="requiresManualWif"
             @keyup.native.enter="doSignTx"
             @submit.prevent
           >
@@ -729,7 +729,7 @@
           </v-form>
 
           <v-form
-            v-if="needsPass"
+            v-if="requiresPassword"
             @keyup.native.enter="doSignTx"
             @submit.prevent
           >
@@ -883,6 +883,8 @@ import {
 import { ScriptBuilder } from "phantasma-sdk-ts/core/vm/index";
 
 import {
+  accountRequiresManualWif,
+  accountRequiresPassword,
   state,
   TxArgsData,
 } from "@/popup/PopupState";
@@ -1018,16 +1020,12 @@ export default class extends Vue {
       });
   }
 
-  get needsWif() {
-    const account = state.currentAccount;
-    if (!account) return true;
-
-    return account.type != "encKey" && account.type != "wif";
+  get requiresManualWif() {
+    return accountRequiresManualWif(state.currentAccount);
   }
 
-  get needsPass() {
-    const account = state.currentAccount;
-    return account && account.type == "encKey";
+  get requiresPassword() {
+    return accountRequiresPassword(state.currentAccount);
   }
 
   get shorterAddress(): string {
@@ -1378,14 +1376,14 @@ export default class extends Vue {
     this.cosmicSwap();
   }
 
-  exportPrivateKeyHex() {
+  async exportPrivateKeyHex() {
     try {
-      this.wif = state.getWifFromPassword(this.password, this.account!);
+      this.wif = await state.getWifFromPassword(this.password, this.account!);
       this.hexPk = getPrivateKeyFromWif(this.wif);
       this.showPrivateKeyDialog = true;
       this.closeSignTx();
     } catch (err) {
-      this.errorMessage = err;
+      this.errorMessage = err instanceof Error ? err.message : String(err);
       this.errorDialog = true;
     }
     this.password = "";
@@ -1430,9 +1428,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);
@@ -1480,9 +1478,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, this.account.address, this.password);
       }
       console.log("tx successful: " + tx);
@@ -1530,9 +1528,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);
@@ -1579,9 +1577,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);
@@ -1632,9 +1630,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);
@@ -1735,9 +1733,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);
@@ -1787,9 +1785,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);

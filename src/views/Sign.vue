@@ -47,7 +47,7 @@
         <v-spacer />
 
         <v-form
-          v-if="needsWif"
+          v-if="requiresManualWif"
           @keyup.native.enter="signtx"
           @submit.prevent
           style="margin: 42px 28px 10px 15px"
@@ -67,7 +67,7 @@
         </v-form>
 
         <v-form
-          v-if="needsPass"
+          v-if="requiresPassword"
           @keyup.native.enter="signtx"
           @submit.prevent
           style="margin: 42px 28px 10px 15px"
@@ -131,7 +131,11 @@
 /// <reference types="chrome"/>
 import Vue from "vue";
 import Component from "vue-class-component";
-import { state } from "@/popup/PopupState";
+import {
+  accountRequiresManualWif,
+  accountRequiresPassword,
+  state,
+} from "@/popup/PopupState";
 
 @Component({})
 export default class extends Vue {
@@ -170,16 +174,12 @@ export default class extends Vue {
     }
   }
 
-  get needsWif() {
-    const account = state.currentAccount;
-    if (!account) return true;
-
-    return account.type != "encKey" && account.type != "wif";
+  get requiresManualWif() {
+    return accountRequiresManualWif(state.currentAccount);
   }
 
-  get needsPass() {
-    const account = state.currentAccount;
-    return account && account.type == "encKey";
+  get requiresPassword() {
+    return accountRequiresPassword(state.currentAccount);
   }
 
   get accountLabel() {
@@ -256,7 +256,7 @@ export default class extends Vue {
     this.messageNotValid = this.$i18n.t("sign.notValid").toString();
 
     try {
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         if (state.isWifValidForAccount(this.wif))
           hash = await state.signTx(txdata, this.wif);
         else {

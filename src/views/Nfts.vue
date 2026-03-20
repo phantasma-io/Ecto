@@ -268,16 +268,16 @@
         <v-card-title class="headline">{{ $t("nfts.authorize") }}</v-card-title>
 
         <v-card-text>
-          <span v-if="needsWif">
+          <span v-if="requiresManualWif">
             {{ $t("nfts.insertWIF") }}
           </span>
-          <span v-if="needsPass">
+          <span v-if="requiresPassword">
             {{ $t("nfts.insertPassword") }}
           </span>
           <v-spacer />
 
           <v-form
-            v-if="needsWif"
+            v-if="requiresManualWif"
             @keyup.native.enter="doSignTx"
             @submit.prevent
           >
@@ -296,7 +296,7 @@
           </v-form>
 
           <v-form
-            v-if="needsPass"
+            v-if="requiresPassword"
             @keyup.native.enter="doSignTx"
             @submit.prevent
           >
@@ -399,7 +399,12 @@
 import Vue from "vue";
 import Component from "vue-class-component";
 import { ScriptBuilder } from "phantasma-sdk-ts/core/vm/index";
-import { state, TxArgsData } from "@/popup/PopupState";
+import {
+  accountRequiresManualWif,
+  accountRequiresPassword,
+  state,
+  TxArgsData,
+} from "@/popup/PopupState";
 import ErrorDialogVue from "@/components/ErrorDialog.vue";
 import NFTMedia from "@/components/NFTMedia.vue";
 import { formatError, logError } from "@/utils/errors";
@@ -615,16 +620,12 @@ export default class extends Vue {
       });
   }
 
-  get needsWif() {
-    const account = state.currentAccount;
-    if (!account) return true;
-
-    return account.type != "encKey" && account.type != "wif";
+  get requiresManualWif() {
+    return accountRequiresManualWif(state.currentAccount);
   }
 
-  get needsPass() {
-    const account = state.currentAccount;
-    return account && account.type == "encKey";
+  get requiresPassword() {
+    return accountRequiresPassword(state.currentAccount);
   }
 
   get shorterAddress(): string {
@@ -799,9 +800,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);
@@ -852,9 +853,9 @@ export default class extends Vue {
     try {
       this.isLoading = true;
       let tx = "";
-      if (this.needsWif) {
+      if (this.requiresManualWif) {
         tx = await state.signTx(txdata, this.wif);
-      } else if (this.needsPass) {
+      } else if (this.requiresPassword) {
         tx = await state.signTxWithPassword(txdata, address, this.password);
       }
       console.log("tx successful: " + tx);

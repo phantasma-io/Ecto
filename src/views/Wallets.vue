@@ -36,11 +36,11 @@
             >
           </v-list-item-content>
           <v-list-item-action>
-            <PopupMenu
-              icon="mdi-dots-vertical"
-              :actions="acc.type == 'encKey' ? popupActionsWif : popupActions"
-              :item="acc"
-            ></PopupMenu>
+              <PopupMenu
+                icon="mdi-dots-vertical"
+                :actions="accountRequiresPassword(acc) ? protectedAccountActions : watchOnlyAccountActions"
+                :item="acc"
+              ></PopupMenu>
           </v-list-item-action>
         </v-list-item>
       </v-list>
@@ -160,7 +160,12 @@ import { Account } from "phantasma-sdk-ts/core/rpc/index";
 import { getPrivateKeyFromWif } from "phantasma-sdk-ts/core/tx/index";
 import ErrorDialog from "@/components/ErrorDialog.vue";
 
-import { state, WalletAccount } from "@/popup/PopupState";
+import {
+  state,
+  WalletAccount,
+  WalletAccountType,
+  accountRequiresPassword,
+} from "@/popup/PopupState";
 import PopupMenuComponent from "@/components/PopupMenu.vue";
 
 @Component({
@@ -172,8 +177,8 @@ import PopupMenuComponent from "@/components/PopupMenu.vue";
 export default class extends Vue {
   state = state;
 
-  popupActions: any[] = [];
-  popupActionsWif: any[] = [];
+  watchOnlyAccountActions: any[] = [];
+  protectedAccountActions: any[] = [];
   desc: any = {};
 
   password = "";
@@ -197,13 +202,15 @@ export default class extends Vue {
     this.$root.$on("changeLanguage", this.onChangeLanguage);
   }
 
+  accountRequiresPassword = accountRequiresPassword;
+
   beforeDestroy() {
     this.$root.$off("changeLanguage", this.onChangeLanguage);
   }
 
   onChangeLanguage() {
     console.log("onChangeLanguage");
-    this.popupActions = [
+    this.watchOnlyAccountActions = [
       // { icon: 'mdi-pen', title: "Add password", subtitle: "Store WIF with password", action: this.addPassword },
       // { divider: true },
       {
@@ -213,7 +220,7 @@ export default class extends Vue {
         action: this.deleteAccount,
       },
     ];
-    this.popupActionsWif = [
+    this.protectedAccountActions = [
       {
         icon: "mdi-home-export-outline",
         title: this.$i18n.t("wallets.titleKey").toString(),
@@ -255,12 +262,11 @@ export default class extends Vue {
     );
   }
 
-  getTypeDesc(type: string): string {
-    if (type == "encKey") return this.$i18n.t("wallets.encKey").toString();
-    else if (type == "unverified")
+  getTypeDesc(type: WalletAccountType): string {
+    if (type === WalletAccountType.Protected)
+      return this.$i18n.t("wallets.encKey").toString();
+    else if (type === WalletAccountType.WatchOnly)
       return this.$i18n.t("wallets.unverified").toString();
-    else if (type == "verified")
-      return this.$i18n.t("wallets.verified").toString();
     return "";
   }
 
@@ -269,16 +275,16 @@ export default class extends Vue {
     this.requestPasswordDialog = true;
   }
 
-  exportPrivateKey() {
+  async exportPrivateKey() {
     if (!this.reqAccount) return;
 
     try {
       this.requestPasswordDialog = false;
-      this.wif = state.getWifFromPassword(this.password, this.reqAccount);
+      this.wif = await state.getWifFromPassword(this.password, this.reqAccount);
       this.hexPk = getPrivateKeyFromWif(this.wif);
       this.showPrivateKeyDialog = true;
     } catch (err) {
-      this.errorMessage = err as string;
+      this.errorMessage = err instanceof Error ? err.message : String(err);
       this.errorDialog = true;
     }
     this.password = "";

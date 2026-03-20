@@ -1,6 +1,5 @@
 import WIF from "wif";
 import fetch from "cross-fetch";
-import * as CryptoJS from "crypto-js";
 
 import {
   PhantasmaAPI,
@@ -24,6 +23,22 @@ import {
   TxMsg,
 } from "phantasma-sdk-ts/core/types/index";
 import { formatError, logError } from "@/utils/errors";
+import {
+  ProtectedWifPayload,
+  isProtectedWifPayload,
+  protectWifWithPassword,
+  revealProtectedWifWithPassword,
+} from "@/utils/protectedWif";
+
+const WALLET_STORAGE_VERSION = 1;
+
+// Wallet account mode is a small domain concept, not an ad-hoc string. Keep
+// the enum explicit so storage, popup UI, and signing flows all speak the same
+// vocabulary.
+export enum WalletAccountType {
+  WatchOnly = "watchOnly",
+  Protected = "protected",
+}
 
 export interface ISymbolAmount {
   symbol: string;
@@ -52,10 +67,35 @@ export interface WalletAccount {
   ethAddress?: string;
   neoAddress?: string;
   bscAddress?: string;
-  type: string;
+  type: WalletAccountType;
   data: Account;
-  wif?: string;
-  encKey?: string;
+  // Account objects intentionally exclude secret material. Encrypted private
+  // keys live in the top-level vault so routine UI/state handling does not drag
+  // protected secrets around with every account payload.
+}
+
+type WalletVault = Record<string, ProtectedWifPayload>;
+
+function isWalletVault(value: unknown): value is WalletVault {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value as Record<string, unknown>).every((entry) =>
+    isProtectedWifPayload(entry)
+  );
+}
+
+export function accountRequiresManualWif(
+  account: WalletAccount | null | undefined
+): boolean {
+  return !account || account.type === WalletAccountType.WatchOnly;
+}
+
+export function accountRequiresPassword(
+  account: WalletAccount | null | undefined
+): boolean {
+  return !!account && account.type === WalletAccountType.Protected;
 }
 
 export interface TxArgsData {
@@ -139,6 +179,7 @@ export class PopupState {
 
   private _currentAccountIndex = 0;
   private _accounts: WalletAccount[] = [];
+  private _vault: WalletVault = {};
   private _authorizations: IAuthorization[] = [];
   private _pendingSwaps: IPendingSwap[] = [];
   private _currency: string = "USD";
@@ -387,6 +428,26 @@ export class PopupState {
     return this._pendingSwaps.filter((ps) => ps.swap != null);
   }
 
+  private persistWalletState(
+    currentAccountIndex: number = this._currentAccountIndex
+  ): Promise<void> {
+    this._currentAccountIndex = currentAccountIndex;
+
+    return new Promise((resolve) => {
+      // Wallet persistence is versioned explicitly at the top level so future
+      // storage revisions can be rejected or handled deterministically.
+      chrome.storage.local.set(
+        {
+          storageVersion: WALLET_STORAGE_VERSION,
+          currentAccountIndex: this._currentAccountIndex,
+          accounts: this._accounts,
+          vault: this._vault,
+        },
+        () => resolve()
+      );
+    });
+  }
+
   get currencySymbol() {
     switch (this._currency) {
       case "USD":
@@ -473,6 +534,43 @@ export class PopupState {
     return new Promise((resolve, reject) => {
       chrome.storage.local.get(async (items) => {
         console.log("[PopupState] Get local storage");
+        const hasPersistedWalletState =
+          items.accounts !== undefined ||
+          items.currentAccountIndex !== undefined ||
+          items.vault !== undefined;
+        const storageVersion = items.storageVersion;
+
+        if (storageVersion === undefined) {
+          if (hasPersistedWalletState) {
+            reject(new Error("Unsupported wallet storage format"));
+            return;
+          }
+
+          // Fresh profiles start with an explicit storage version and an empty
+          // vault bucket so all subsequent wallet writes share the same shape.
+          this._vault = {};
+          chrome.storage.local.set({
+            storageVersion: WALLET_STORAGE_VERSION,
+            vault: this._vault,
+          });
+        } else if (storageVersion !== WALLET_STORAGE_VERSION) {
+          reject(new Error(`Unsupported wallet storage version: ${storageVersion}`));
+          return;
+        } else if (items.vault === undefined) {
+          // The vault is stored separately from accounts so encrypted secrets
+          // are never embedded in the UI-facing account objects.
+          this._vault = {};
+          chrome.storage.local.set({
+            storageVersion: WALLET_STORAGE_VERSION,
+            vault: this._vault,
+          });
+        } else if (!isWalletVault(items.vault)) {
+          reject(new Error("Unsupported wallet vault format"));
+          return;
+        } else {
+          this._vault = items.vault;
+        }
+
         this._currentAccountIndex =
           typeof items.currentAccountIndex === "number"
             ? items.currentAccountIndex
@@ -518,9 +616,7 @@ export class PopupState {
             accounts: this._accounts.length,
           });
           this._currentAccountIndex = 0;
-          chrome.storage.local.set({
-            currentAccountIndex: this._currentAccountIndex,
-          });
+          this.persistWalletState(this._currentAccountIndex);
         }
 
         try {
@@ -545,8 +641,9 @@ export class PopupState {
           console.error("Could not get tokens", err);
         }
 
-        if (this._accounts.length !== numAccounts)
-          chrome.storage.local.set({ accounts: this._accounts });
+        if (this._accounts.length !== numAccounts) {
+          this.persistWalletState(this._currentAccountIndex);
+        }
 
         resolve();
       });
@@ -593,6 +690,7 @@ export class PopupState {
 
     this._currentAccountIndex = 0;
     this._accounts = [];
+    this._vault = {};
     this._authorizations = [];
   }
 
@@ -722,17 +820,13 @@ export class PopupState {
     if (!alreadyExisting) {
       len = this._accounts.push({
         address: accountData.address,
-        type: "unverified",
+        type: WalletAccountType.WatchOnly,
         data: accountData,
       });
     }
 
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(
-        { currentAccountIndex: len - 1, accounts: this._accounts },
-        () => resolve()
-      );
-    });
+    const nextAccountIndex = alreadyExisting ? this._currentAccountIndex : len - 1;
+    return this.persistWalletState(nextAccountIndex);
   }
 
   isWifValidForAccount(
@@ -764,38 +858,21 @@ export class PopupState {
         rpc: this.api.host,
       });
     }
-    const hasPass = password != null && password != "";
     const matchAccount = this.accounts.filter(
       (a) => a.address == accountData.address
     );
     const alreadyExisting = matchAccount.length > 0 ? true : false;
 
-    if (hasPass && !alreadyExisting) {
-      const encKey = CryptoJS.AES.encrypt(wif, password).toString();
-      this._accounts.push({
-        address: accountData.address,
-        type: "encKey",
-        encKey,
-        data: accountData,
-      });
-    } else if (!alreadyExisting) {
-      this._accounts.push({
-        address: accountData.address,
-        type: "wif",
-        wif,
-        data: accountData,
-      });
+    if (!alreadyExisting) {
+      this._accounts.push(
+        await this.createProtectedWalletAccount(wif, password, accountData)
+      );
     }
 
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(
-        {
-          currentAccountIndex: this._accounts.length - 1,
-          accounts: this._accounts,
-        },
-        () => resolve()
-      );
-    });
+    const nextAccountIndex = alreadyExisting
+      ? this._currentAccountIndex
+      : this._accounts.length - 1;
+    return this.persistWalletState(nextAccountIndex);
   }
 
   async addAccountWithHex(hex: string, password: string): Promise<void> {
@@ -818,33 +895,16 @@ export class PopupState {
     );
     const alreadyExisting = matchAccount.length > 0 ? true : false;
 
-    const hasPass = password != null && password != "";
-    if (hasPass && !alreadyExisting) {
-      const encKey = CryptoJS.AES.encrypt(wif, password).toString();
-      this._accounts.push({
-        address: accountData.address,
-        type: "encKey",
-        encKey,
-        data: accountData,
-      });
-    } else if (!alreadyExisting) {
-      this._accounts.push({
-        address: accountData.address,
-        type: "wif",
-        wif,
-        data: accountData,
-      });
+    if (!alreadyExisting) {
+      this._accounts.push(
+        await this.createProtectedWalletAccount(wif, password, accountData)
+      );
     }
 
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(
-        {
-          currentAccountIndex: this._accounts.length - 1,
-          accounts: this._accounts,
-        },
-        () => resolve()
-      );
-    });
+    const nextAccountIndex = alreadyExisting
+      ? this._currentAccountIndex
+      : this._accounts.length - 1;
+    return this.persistWalletState(nextAccountIndex);
   }
 
   async selectAccount(account: WalletAccount): Promise<void> {
@@ -858,17 +918,13 @@ export class PopupState {
   async deleteAccount(account: WalletAccount): Promise<void> {
     const currentAccount = this.currentAccount;
     this._accounts = this.accounts.filter((a) => a.address != account.address);
+    delete this._vault[account.address];
     let idx = this.accounts.findIndex(
       (a) => a.address == currentAccount?.address
     );
     if (idx == -1) idx = 0;
 
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(
-        { currentAccountIndex: idx, accounts: this._accounts },
-        () => resolve()
-      );
-    });
+    return this.persistWalletState(idx);
   }
 
   async refreshCurrentAccount(): Promise<void> {
@@ -911,9 +967,7 @@ export class PopupState {
       JSON.stringify(this._accounts[this._currentAccountIndex])
     );
 
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set({ accounts: this._accounts }, () => resolve());
-    });
+    return this.persistWalletState(this._currentAccountIndex);
   }
 
   async authorizeDapp(
@@ -950,6 +1004,55 @@ export class PopupState {
     return this._authorizations.find((a) => a.token == token)!.dapp;
   }
 
+  private async createProtectedWalletAccount(
+    wif: string,
+    password: string,
+    accountData: Account
+  ): Promise<WalletAccount> {
+    if (!password) {
+      throw new Error("Password is required to store a wallet in Ecto 2.0.0");
+    }
+
+    // The account record stays public/UI-only, while the vault keeps the
+    // encrypted private key under the canonical address for that account.
+    this._vault[accountData.address] = await protectWifWithPassword(wif, password);
+
+    return {
+      address: accountData.address,
+      type: WalletAccountType.Protected,
+      data: accountData,
+    };
+  }
+
+  private async getWifFromAccount(
+    account: WalletAccount,
+    password: string
+  ): Promise<string> {
+    if (!password) {
+      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
+    }
+
+    const protectedWif = this._vault[account.address];
+    if (!protectedWif || !isProtectedWifPayload(protectedWif)) {
+      throw new Error(this.$i18n.t("error.noEncrypted").toString());
+    }
+
+    let wif = "";
+    // All password-based unlock, signing, and export flows go through this
+    // single decrypt gate so the storage policy stays consistent everywhere.
+    try {
+      wif = await revealProtectedWifWithPassword(protectedWif, password);
+    } catch {
+      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
+    }
+
+    if (!this.isWifValidForAccount(wif, account)) {
+      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
+    }
+
+    return wif;
+  }
+
   async signTxWithPassword(
     txdata: TxArgsData,
     address: string,
@@ -957,21 +1060,7 @@ export class PopupState {
   ) {
     const account = this.accounts.find((a) => a.address == address);
     if (!account) throw new Error(this.$i18n.t("error.noAccount").toString());
-
-    let wif = "";
-    if (password == "") {
-      if (account.wif) wif = account.wif;
-    } else {
-      if (!account.encKey)
-        throw new Error(this.$i18n.t("error.noEncrypted").toString());
-
-      const hex = CryptoJS.AES.decrypt(account.encKey, password).toString();
-      for (var i = 0; i < hex.length && hex.substr(i, 2) !== "00"; i += 2)
-        wif += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-    }
-
-    if (!this.isWifValidForAccount(wif))
-      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
+    const wif = await this.getWifFromAccount(account, password);
 
     return await this.signTx(txdata, wif);
   }
@@ -1011,20 +1100,9 @@ export class PopupState {
     password: string
   ) {
     const account = this.accounts.find((a) => a.address == address);
-    if (!account) throw new Error(this.$i18n.t("error.noAccount").toString());  
-    let wif = "";
-    if (password == "") {
-      if (account.wif) wif = account.wif;
-    } else {
-      if (!account.encKey)
-        throw new Error(this.$i18n.t("error.noEncrypted").toString());
-      const hex = CryptoJS.AES.decrypt(account.encKey, password).toString();
-      for (var i = 0; i < hex.length && hex.substr(i, 2) !== "00"; i += 2)
-        wif += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-    }
-    if (!this.isWifValidForAccount(wif))
-      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
-    
+    if (!account) throw new Error(this.$i18n.t("error.noAccount").toString());
+    const wif = await this.getWifFromAccount(account, password);
+
     return await this.signCarbonTx(txdata, wif);
   }
 
@@ -1044,28 +1122,14 @@ export class PopupState {
     return hash;
   }
 
-  signDataWithPassword(
+  async signDataWithPassword(
     data: string,
     address: string,
     password: string
-  ): string {
+  ): Promise<string> {
     const account = this.accounts.find((a) => a.address == address);
     if (!account) throw new Error(this.$i18n.t("error.noAccount").toString());
-
-    let wif = "";
-    if (password == "") {
-      if (account.wif) wif = account.wif;
-    } else {
-      if (!account.encKey)
-        throw new Error(this.$i18n.t("error.noEncrypted").toString());
-
-      const hex = CryptoJS.AES.decrypt(account.encKey, password).toString();
-      for (var i = 0; i < hex.length && hex.substr(i, 2) !== "00"; i += 2)
-        wif += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-    }
-
-    if (!this.isWifValidForAccount(wif))
-      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
+    const wif = await this.getWifFromAccount(account, password);
 
     return this.signData(data, wif);
   }
@@ -1082,29 +1146,14 @@ export class PopupState {
     return signData(data, privateKey);
   }
 
-  getWifFromPassword(
+  async getWifFromPassword(
     password: string,
     acc: WalletAccount | undefined = undefined
-  ) {
+  ): Promise<string> {
     const account = acc !== undefined ? acc : this.currentAccount;
     if (!account) throw new Error(this.$i18n.t("error.noAccount").toString());
 
-    let wif = "";
-    if (password == "") {
-      if (account.wif) wif = account.wif;
-    } else {
-      if (!account.encKey)
-        throw new Error(this.$i18n.t("error.noEncrypted").toString());
-
-      const hex = CryptoJS.AES.decrypt(account.encKey, password).toString();
-      for (var i = 0; i < hex.length && hex.substr(i, 2) !== "00"; i += 2)
-        wif += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-    }
-
-    if (!this.isWifValidForAccount(wif, account))
-      throw new Error(this.$i18n.t("error.noPasswordMatch").toString());
-
-    return wif;
+    return this.getWifFromAccount(account, password);
   }
 
   getAllTokens(): Token[] {
