@@ -108,10 +108,12 @@ export interface TxArgsData {
 export interface NexusData<T> {
   mainnet: T | undefined;
   testnet: T | undefined;
-  simnet: T | undefined;
+  devnet: T | undefined;
+  localnet: T | undefined;
   mainnetLastUpdate: number;
   testnetLastUpdate: number;
-  simnetLastUpdate: number;
+  devnetLastUpdate: number;
+  localnetLastUpdate: number;
 }
 
 function createEmptyAccountData(address: string): Account {
@@ -187,17 +189,20 @@ export class PopupState {
   private _balanceShown: boolean = true;
   private _currenciesRate: any;
   private _nexus: string = "MainNet";
-  private _simnetRpc = "http://localhost:5172/rpc";
+  private _localnetRpc = "http://localhost:5172/rpc";
   private _testnetRpc = "https://testnet.phantasma.info/rpc";
+  private _devnetRpc = "https://devnet.phantasma.info/rpc";
   private _mainnetRpc = "Auto";
   private _defRpcHost = "https://pharpc1.phantasma.info/rpc";
   private _tokens: NexusData<Token[]> = {
     mainnet: [],
     testnet: [],
-    simnet: [],
+    devnet: [],
+    localnet: [],
     mainnetLastUpdate: 0,
     testnetLastUpdate: 0,
-    simnetLastUpdate: 0,
+    devnetLastUpdate: 0,
+    localnetLastUpdate: 0,
   };
 
   accountNfts: any[] = [];
@@ -306,12 +311,16 @@ export class PopupState {
     return this._nexus.toLowerCase();
   }
 
-  get simnetRpc() {
-    return this._simnetRpc;
+  get localnetRpc() {
+    return this._localnetRpc;
   }
 
   get testnetRpc() {
     return this._testnetRpc;
+  }
+
+  get devnetRpc() {
+    return this._devnetRpc;
   }
 
   get mainnetRpc() {
@@ -368,13 +377,13 @@ export class PopupState {
     });
   }
 
-  async setSimnetRpc(value: string): Promise<void> {
-    this._simnetRpc = value;
+  async setLocalnetRpc(value: string): Promise<void> {
+    this._localnetRpc = value;
     this.updateRpc();
     return new Promise((resolve, reject) => {
       chrome.storage.local.set(
         {
-          simnetRpc: this._simnetRpc,
+          localnetRpc: this._localnetRpc,
         },
         () => resolve()
       );
@@ -388,6 +397,19 @@ export class PopupState {
       chrome.storage.local.set(
         {
           testnetRpc: this._testnetRpc,
+        },
+        () => resolve()
+      );
+    });
+  }
+
+  async setDevnetRpc(value: string): Promise<void> {
+    this._devnetRpc = value;
+    this.updateRpc();
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set(
+        {
+          devnetRpc: this._devnetRpc,
         },
         () => resolve()
       );
@@ -512,8 +534,9 @@ export class PopupState {
   
   updateRpc(): void {
     let rpc = this._mainnetRpc == 'Auto' && this.availableHosts.length > 0 ? this.availableHosts[0].url : this._defRpcHost;
-    if (this._nexus == "SimNet") rpc = this._simnetRpc;
+    if (this._nexus == "LocalNet") rpc = this._localnetRpc;
     if (this._nexus == "TestNet") rpc = this._testnetRpc;
+    if (this._nexus == "DevNet") rpc = this._devnetRpc;
 
     if (!rpc.endsWith('/rpc')) 
       rpc += '/rpc';
@@ -588,6 +611,19 @@ export class PopupState {
 
         if (items.tokens) this._tokens = items.tokens;
 
+        // Older profiles may still have the former SimNet naming in persisted
+        // network settings. Normalize that runtime state once so the renamed
+        // LocalNet option keeps working without leaving half-renamed values.
+        if ((this._tokens as any).simnet !== undefined && this._tokens.localnet === undefined) {
+          this._tokens.localnet = (this._tokens as any).simnet;
+        }
+        if (
+          (this._tokens as any).simnetLastUpdate !== undefined &&
+          this._tokens.localnetLastUpdate === undefined
+        ) {
+          this._tokens.localnetLastUpdate = (this._tokens as any).simnetLastUpdate;
+        }
+
         console.log("Current tokens", JSON.stringify(this._tokens, null, 2));
 
         const numAccounts = items.accounts ? items.accounts.length : 0;
@@ -595,10 +631,12 @@ export class PopupState {
         if (items.gasPrice) this.gasPrice = items.gasPrice;
         if (items.gasLimit) this.gasLimit = items.gasLimit;
 
-        if (items.simnetRpc) this._simnetRpc = items.simnetRpc;
+        if (items.localnetRpc) this._localnetRpc = items.localnetRpc;
+        else if (items.simnetRpc) this._localnetRpc = items.simnetRpc;
         if (items.testnetRpc) this._testnetRpc = items.testnetRpc;
+        if (items.devnetRpc) this._devnetRpc = items.devnetRpc;
         if (items.mainnetRpc) this._mainnetRpc = items.mainnetRpc;
-        if (items.nexus) this._nexus = items.nexus;
+        if (items.nexus) this._nexus = items.nexus == "SimNet" ? "LocalNet" : items.nexus;
 
         this.api.setNexus(this._nexus);
         this.updateRpc();

@@ -105,24 +105,46 @@
         </template>
         <v-list dense>
           <v-list-item-group v-model="netIndex">
-            <v-list-item @click="selectNet('SimNet')">
-              <v-list-item-title>SimNet</v-list-item-title>
+            <v-list-item @click="selectNet('LocalNet')">
+              <v-list-item-title>LocalNet</v-list-item-title>
               <v-list-item-action-text
                 class="ma-0"
                 style="font-size:10px; width:450px; text-align: right"
                 ><v-text-field
-                  v-if="editSimnetRpc"
-                  v-model="simnetRpc"
+                  v-if="editLocalnetRpc"
+                  v-model="localnetRpc"
                   autofocus
                   dense
-                  @blur="acceptSimnetRpc"
-                  @keyup.native.enter="acceptSimnetRpc"
+                  @blur="acceptLocalnetRpc"
+                  @keyup.native.enter="acceptLocalnetRpc"
                 ></v-text-field
                 ><span v-else style="width:300px; word-break:break-all">{{
-                  simnetRpc
+                  localnetRpc
                 }}</span></v-list-item-action-text
-              ><v-list-item-action v-if="!editSimnetRpc" class="ml-1"
-                ><v-btn icon small @click="editSimnetRpc = true"
+              ><v-list-item-action v-if="!editLocalnetRpc" class="ml-1"
+                ><v-btn icon small @click="editLocalnetRpc = true"
+                  ><v-icon small>mdi-pencil</v-icon></v-btn
+                ></v-list-item-action
+              >
+            </v-list-item>
+            <v-list-item @click="selectNet('DevNet')">
+              <v-list-item-title>DevNet</v-list-item-title>
+              <v-list-item-action-text
+                class="ma-0"
+                style="font-size:10px; width:450px; text-align: right"
+                ><v-text-field
+                  v-if="editDevnetRpc"
+                  v-model="devnetRpc"
+                  autofocus
+                  dense
+                  @blur="acceptDevnetRpc"
+                  @keyup.native.enter="acceptDevnetRpc"
+                ></v-text-field
+                ><span v-else style="width:300px; word-break:break-all">{{
+                  devnetRpc
+                }}</span></v-list-item-action-text
+              ><v-list-item-action v-if="!editDevnetRpc" class="ml-1"
+                ><v-btn icon small @click="editDevnetRpc = true"
                   ><v-icon small>mdi-pencil</v-icon></v-btn
                 ></v-list-item-action
               >
@@ -239,8 +261,10 @@ export default class extends Vue {
   snackInfo = false;
   snackInfoMessage = "";
 
-  simnetRpc = "http://localhost:5172/rpc";
-  editSimnetRpc = false;
+  localnetRpc = "http://localhost:5172/rpc";
+  editLocalnetRpc = false;
+  devnetRpc = "https://devnet.phantasma.info/rpc";
+  editDevnetRpc = false;
   testnetRpc = "https://testnet.phantasma.info/rpc";
   editTestnetRpc = false;
   mainnetRpc = "Auto";
@@ -342,11 +366,13 @@ export default class extends Vue {
     this.resetGasSettings();
 
     const nexus = state.nexus;
-    if (nexus == "simnet") this.netIndex = 0;
-    if (nexus == "testnet") this.netIndex = 1;
-    if (nexus == "mainnet") this.netIndex = 2;
+    if (nexus == "localnet") this.netIndex = 0;
+    if (nexus == "devnet") this.netIndex = 1;
+    if (nexus == "testnet") this.netIndex = 2;
+    if (nexus == "mainnet") this.netIndex = 3;
 
-    this.simnetRpc = state.simnetRpc;
+    this.localnetRpc = state.localnetRpc;
+    this.devnetRpc = state.devnetRpc;
     this.testnetRpc = state.testnetRpc;
     this.mainnetRpc = state.mainnetRpc;
     console.log("MainnetRpc is", this.mainnetRpc);
@@ -463,14 +489,19 @@ export default class extends Vue {
     }
   }
 
-  async acceptSimnetRpc() {
-    this.editSimnetRpc = false;
-    state.setSimnetRpc(this.simnetRpc);
+  async acceptLocalnetRpc() {
+    this.editLocalnetRpc = false;
+    state.setLocalnetRpc(this.localnetRpc);
   }
 
   async acceptTestnetRpc() {
     this.editTestnetRpc = false;
     state.setTestnetRpc(this.testnetRpc);
+  }
+
+  async acceptDevnetRpc() {
+    this.editDevnetRpc = false;
+    state.setDevnetRpc(this.devnetRpc);
   }
 
   async acceptMainnetRpc() {
