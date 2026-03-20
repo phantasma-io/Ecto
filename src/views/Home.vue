@@ -1133,14 +1133,16 @@ export default class extends Vue {
   }
 
   getExplorerLink(hash: string) {
+    // Keep explorer routing aligned with the current explorer deployments.
+    // All supported explorers now expose transaction pages as /tx/<hash>.
     return (
       (state.nexus == "testnet"
-        ? "http://test-explorer.phantasma.info/tx/"
+        ? "https://testnet-explorer.phantasma.info/tx/"
         : state.nexus == "devnet"
         ? "https://devnet-explorer.phantasma.info/tx/"
         : state.nexus == "localnet"
-        ? "https://localhost:7088/"
-        : "https://explorer.phantasma.info/en/transaction?id=") + hash
+        ? "http://localhost:3000/tx/"
+        : "https://explorer.phantasma.info/tx/") + hash
     );
   }
 
