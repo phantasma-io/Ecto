@@ -331,7 +331,9 @@ export default class extends Vue {
     this.mainnetRpc = state.mainnetRpc;
     console.log("MainnetRpc is", this.mainnetRpc);
 
-    if (!state.hasAccount) {
+    // Vue Router rejects duplicate navigations, so avoid pushing the add-wallet
+    // route again when the popup is already rendering it.
+    if (!state.hasAccount && this.$route.path !== "/addwallet") {
       this.$router.push("/addwallet");
     }
 
