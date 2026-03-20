@@ -447,8 +447,8 @@ export default class extends Vue {
     const mnemonic = bip39.generateMnemonic()
     this.seedWords = mnemonic.split(' ')
     this.seed = bip39.mnemonicToSeedSync(mnemonic)
-    console.log('bip39 nemonic', mnemonic)
-    console.log('seed', this.seed)
+    // This is the recovery-material boundary for the wallet. Never log the
+    // mnemonic, seed bytes, derived private key, or password from this flow.
     const hdWallet = hdkey.fromMasterSeed(this.seed);
     const root = hdWallet.derivePath(`m/44'/60'/0'/0`);
 
@@ -462,10 +462,10 @@ export default class extends Vue {
     for (let i = 0; i < numWallets; i++) {
       const child = root.deriveChild(i);
       const wallet = child.getWallet();
-      console.log('new Wallet', wallet, wallet.getAddressString(), wallet.getChecksumAddressString())
+      // Seed imports can derive multiple accounts at once, so logging this loop
+      // would leak every generated private key in a single action.
       try {
         this.isLoading = true;
-        console.log('adding account with', wallet.getPrivateKeyString().substr(2), this.password)
         await state.addAccountWithHex(wallet.getPrivateKeyString().substr(2), this.password);
       } catch (err) {
         this.showImportError(this.errorMessage2 || formatError(err), err);
