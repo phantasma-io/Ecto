@@ -187,7 +187,7 @@ export class PopupState {
   private _balanceShown: boolean = true;
   private _currenciesRate: any;
   private _nexus: string = "MainNet";
-  private _simnetRpc = "http://localhost:7077/rpc";
+  private _simnetRpc = "http://localhost:5172/rpc";
   private _testnetRpc = "https://testnet.phantasma.info/rpc";
   private _mainnetRpc = "Auto";
   private _defRpcHost = "https://pharpc1.phantasma.info/rpc";

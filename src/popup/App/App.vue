@@ -239,7 +239,7 @@ export default class extends Vue {
   snackInfo = false;
   snackInfoMessage = "";
 
-  simnetRpc = "http://localhost:7077/rpc";
+  simnetRpc = "http://localhost:5172/rpc";
   editSimnetRpc = false;
   testnetRpc = "https://testnet.phantasma.info/rpc";
   editTestnetRpc = false;
