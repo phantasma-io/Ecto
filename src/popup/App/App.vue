@@ -179,6 +179,12 @@
         </v-list> </v-menu
       ><v-icon x-small class="ml-2" @click="refreshAccount">mdi-refresh</v-icon
       ><v-icon x-small class="ml-2" @click="toggleBalance">mdi-eye</v-icon
+      ><v-icon
+        x-small
+        class="ml-2"
+        title="Open current view in tab"
+        @click="openCurrentRouteInTab"
+        >mdi-open-in-new</v-icon
       ><v-spacer /><span style="cursor:pointer;" @click="settingsDialog = true"
         >v{{ version }}<v-icon x-small class="ml-2">mdi-settings</v-icon>
       </span>
@@ -309,6 +315,20 @@ export default class extends Vue {
 
     const gasPriceItem = this.gasPriceItems.find(i =>  i.value == state.gasPrice)
     if (gasPriceItem) this.gasPriceValue = gasPriceItem
+  }
+
+  openCurrentRouteInTab() {
+    // Mirror the current hash-route into a normal extension tab so users can
+    // keep the same screen open while switching focus away from the popup.
+    const targetRoute = this.$route.fullPath || "/";
+    const targetUrl = chrome.runtime.getURL(`popup.html#${targetRoute}`);
+
+    chrome.tabs.create({ url: targetUrl }, () => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        this.reportUnexpectedError("Could not open wallet in tab", error.message);
+      }
+    });
   }
 
   async mounted() {
